@@ -1,0 +1,29 @@
+{
+  "name": "jetson-cross-dev",
+  "dockerComposeFile": "../docker-compose.yml",
+  "service": "jetson-dev",
+  "workspaceFolder": "/workspaces/repo",
+  "remoteUser": "vscode",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "llvm-vs-code-extensions.vscode-clangd",
+        "xaver.clang-format",
+        "ms-vscode.cmake-tools",
+        "vadimcn.vscode-lldb",
+        "openai.chatgpt",
+        "eamodio.gitlens"
+      ],
+      "settings": {
+        "clang-format.executable": "/usr/bin/clang-format",
+        "clang-format.style": "file",
+        "files.insertFinalNewline": true,
+
+        "clangd.path": "/usr/bin/clangd",
+        "clangd.arguments": [
+          "--header-insertion=never"
+        ]
+      }
+    }
+  }
+}

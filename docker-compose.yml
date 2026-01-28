@@ -1,0 +1,14 @@
+services:
+  jetson-dev:
+    build:
+      context: .
+      dockerfile: .devcontainer/Dockerfile
+    container_name: jetson-dev
+    platform: linux/amd64
+    volumes:
+      - .:/workspaces/repo:cached
+      # Mount target sysroot
+      - ./sysroots/r36.4.4:/opt/jetson-sysroot:ro
+    working_dir: /workspaces/repo
+    tty: true
+    stdin_open: true

@@ -1,0 +1,46 @@
+# .clang-format (clang-format 14 compatible) — Rust-ish C/C++ style
+BasedOnStyle: LLVM
+IndentWidth: 4
+ContinuationIndentWidth: 4
+UseTab: Never
+ColumnLimit: 99
+BreakBeforeBraces: Attach
+AlignAfterOpenBracket: BlockIndent
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortFunctionsOnASingleLine: Empty
+AllowShortLoopsOnASingleLine: false
+AllowShortBlocksOnASingleLine: Empty
+BinPackArguments: false
+BinPackParameters: false
+BreakBeforeBinaryOperators: NonAssignment
+AlwaysBreakTemplateDeclarations: Yes
+ConstructorInitializerAllOnOneLineOrOnePerLine: true
+ConstructorInitializerIndentWidth: 4
+IndentCaseLabels: true
+NamespaceIndentation: All
+AlignEscapedNewlines: DontAlign
+AlignOperands: false
+AlignTrailingComments: false
+SpaceBeforeParens: ControlStatements
+SpaceBeforeRangeBasedForLoopColon: true
+SpaceInEmptyParentheses: false
+SpacesBeforeTrailingComments: 1
+PointerAlignment: Left
+ReferenceAlignment: Left
+Cpp11BracedListStyle: true
+ReflowComments: false
+FixNamespaceComments: true
+SeparateDefinitionBlocks: Always
+SortIncludes: true
+SortUsingDeclarations: true
+AlwaysBreakAfterReturnType: None
+PenaltyReturnTypeOnItsOwnLine: 1000000
+AllowAllParametersOfDeclarationOnNextLine: false
+PenaltyBreakBeforeFirstCallParameter: 1
+IncludeBlocks: Regroup
+
+IncludeCategories:
+  - Regex: "^<.*>"
+    Priority: 1
+  - Regex: '^".*"'
+    Priority: 2
