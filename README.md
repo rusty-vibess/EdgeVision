@@ -82,7 +82,7 @@ cmake -S /workspaces/repo/toolchain-tests \
   -B /workspaces/repo/toolchain-tests/build \
   -G Ninja \
   -DCMAKE_TOOLCHAIN_FILE=/workspaces/repo/toolchains/jetson/jetson-aarch64.cmake \
-  # Overlay libs may require paths being specified for RPath linking  
+  # Overlay libs may require paths being specified for RPath linking
   -DTORCH_RUNTIME_LIB_DIR=<TORCH_RUNTIME_LIB_DIR>
 ```
 
@@ -123,3 +123,16 @@ Shell access:
 ```bash
 docker exec -it jetson-dev bash
 ```
+
+---
+
+### Dev Info
+
+For LSP support you'll require a `compile_commands.json` at root, the simplest way to get this is when we configure our cmake pass the `-DCMAKE_EXPORT_COMPILE_COMMANDS=ON` flag and then create a symbolic link to the produced file.
+
+```bash
+# From repo root
+ln -s .../build/compile_commands.json .
+```
+
+Then restart clangd extension in vscode.

@@ -1,8 +1,9 @@
 # junk
 .DS_Store
 
-# build dirs
+# build and cmake
 build
+.cache
 
 # sysroots
 sysroots
