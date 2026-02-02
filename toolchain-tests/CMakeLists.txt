@@ -6,4 +6,4 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 add_subdirectory(00-hello)
 add_subdirectory(10-cuda-runtime)
-# add_subdirectory(20-libtorch)
+add_subdirectory(20-libtorch)
