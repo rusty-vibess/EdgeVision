@@ -1,6 +1,13 @@
-# CPP build directories
+# junk
+.DS_Store
+
+# build dirs
 build
 
-# Sysroots
+# sysroots
 sysroots
+
+# dep objects
+third_party
+site-packages
 
