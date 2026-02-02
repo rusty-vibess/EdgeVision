@@ -4,6 +4,7 @@
 # build and cmake
 build
 .cache
+compile_commands.json
 
 # sysroots
 sysroots
