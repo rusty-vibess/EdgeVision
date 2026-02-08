@@ -1,0 +1,46 @@
+--- _deps/k4a-src/CMakeLists.txt
++++ _deps/k4a-src/CMakeLists.txt
+@@ -24,6 +24,9 @@
+     VERSION 1.4)
+ 
+ option(K4A_BUILD_DOCS "Build K4A doxygen documentation" OFF)
++option(K4A_BUILD_TESTS "Build K4A tests" ON)
++option(K4A_BUILD_EXAMPLES "Build K4A examples" ON)
++option(K4A_BUILD_TOOLS "Build K4A tools" ON)
+ option(K4A_MTE_VERSION "Skip FW version check" OFF)
+ option(K4A_SOURCE_LINK "Enable source linking on MSVC" OFF)
+ 
+@@ -104,7 +107,9 @@
+ add_subdirectory(extern)
+ 
+ # Don't enable testing until after building dependencies
+-enable_testing()
++if (K4A_BUILD_TESTS)
++    enable_testing()
++endif()
+ 
+ # Turn on compiler flags for our code
+ include(k4aCompilerFlags)
+@@ -161,10 +166,19 @@
+     endif()
+ endif()
+ 
+-add_subdirectory(examples)
++if (K4A_BUILD_EXAMPLES)
++    add_subdirectory(examples)
++endif()
++
+ add_subdirectory(src)
+-add_subdirectory(tests)
+-add_subdirectory(tools)
++
++if (K4A_BUILD_TESTS)
++    add_subdirectory(tests)
++endif()
++
++if (K4A_BUILD_TOOLS)
++    add_subdirectory(tools)
++endif()
+ 
+ if (K4A_BUILD_DOCS)
+     find_package(Doxygen 1.8.14 EXACT)

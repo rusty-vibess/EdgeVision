@@ -1,0 +1,10 @@
+--- _deps/k4a-src/examples/viewer/opengl/k4adepthpixelcolorizer.h.orig	2026-02-07 18:32:45.430285765 +0000
++++ _deps/k4a-src/examples/viewer/opengl/k4adepthpixelcolorizer.h	2026-02-07 18:29:12.027262581 +0000
+@@ -7,6 +7,7 @@
+ // System headers
+ //
+ #include <algorithm>
++#include <limits>
+ 
+ // Library headers
+ //

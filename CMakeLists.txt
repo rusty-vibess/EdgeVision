@@ -1,16 +1,33 @@
 # ----- FLAGS -----
 cmake_minimum_required(VERSION 3.16)
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Enable sanitizers for all non-Release builds
+# ---- Build Config ----
+if(CMAKE_CONFIGURATION_TYPES)
+    set(IS_MULTI_CONFIG ON)
+    message(STATUS "Multi-config generator")
+    foreach(config ${CMAKE_CONFIGURATION_TYPES})
+        message(STATUS "Build type(s): (${config} config)")
+    endforeach()
+else()
+    set(IS_MULTI_CONFIG OFF)
+    message(STATUS "Single-config generator")
+    message(STATUS "Build type: (${CMAKE_BUILD_TYPE})")
+endif()
+
+if(NOT IS_MULTI_CONFIG AND NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Debug CACHE STRING "Build type" FORCE)
+    message(STATUS "Defaulting CMAKE_BUILD_TYPE to Debug")
+endif()
+
+# ---- Sanitizers ----
 set(SANITIZE_FLAGS "-fsanitize=address,undefined -fno-omit-frame-pointer")
 
-if (CMAKE_CONFIGURATION_TYPES)
-    # Multi-config generator (VS, Xcode)
-    message(STATUS "Enabling sanitizers for non-Release configs")
+if(IS_MULTI_CONFIG)
     foreach(config ${CMAKE_CONFIGURATION_TYPES})
-        if (NOT config STREQUAL "Release")
+        if(config STREQUAL "Debug")
+            message(STATUS "Enabling sanitizers for ${config} config")
             string(TOUPPER ${config} CONFIG_UPPER)
             set(CMAKE_C_FLAGS_${CONFIG_UPPER}
                 "${CMAKE_C_FLAGS_${CONFIG_UPPER}} ${SANITIZE_FLAGS}")
@@ -23,8 +40,7 @@ if (CMAKE_CONFIGURATION_TYPES)
         endif()
     endforeach()
 else()
-    # Single-config generator (Make, Ninja)
-    if (NOT CMAKE_BUILD_TYPE STREQUAL "Release")
+    if(CMAKE_BUILD_TYPE STREQUAL "Debug")
         message(STATUS "Enabling sanitizers (build type: ${CMAKE_BUILD_TYPE})")
         set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${SANITIZE_FLAGS}")
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${SANITIZE_FLAGS}")
@@ -36,7 +52,10 @@ endif()
 # ----- PROJECT -----
 project(EdgeVision LANGUAGES CXX)
 
+add_executable(EdgeVision src/main.cpp)
+# third_party deps install
+list(APPEND CMAKE_PREFIX_PATH "/opt/jetson-sysroot-overlay/install")
+
 add_subdirectory(src/capture)
 
-add_executable(EdgeVision src/main.cpp)
 target_link_libraries(EdgeVision PRIVATE capture)
