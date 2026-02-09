@@ -38,7 +38,7 @@ The sysroot is built by mirroring the Jetson root filesystem with `rsync`, then 
 Run these inside the cross-compilation container. The build expects:
 
 * Sysroot: `/opt/jetson-sysroot`
-* Overlay: `/opt/jetson-sysroot-overlay`
+* Overlay: `/opt/jetson-sysroot/edgevision`
 
 The rsynced filesystem contains absolute symlinks (e.g. `/lib/...`) which break relocation.
 
@@ -190,7 +190,7 @@ cmake -S cmake/third_party \
   -B build-deps \
   -G Ninja \
   -DCMAKE_BUILD_TYPE=Release \
-  -DCMAKE_INSTALL_PREFIX=/opt/jetson-sysroot-overlay/install \
+  -DCMAKE_INSTALL_PREFIX=/opt/jetson-sysroot/edgevision/install \
   -DCMAKE_TOOLCHAIN_FILE=/workspaces/repo/toolchains/jetson/jetson-aarch64.cmake \
 && cmake --build build-deps --target install
 
