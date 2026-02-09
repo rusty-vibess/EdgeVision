@@ -54,7 +54,7 @@ project(EdgeVision LANGUAGES CXX)
 
 add_executable(EdgeVision src/main.cpp)
 # third_party deps install
-list(APPEND CMAKE_PREFIX_PATH "/opt/jetson-sysroot-overlay/install")
+list(APPEND CMAKE_PREFIX_PATH "/opt/jetson-sysroot/edgevision/install")
 
 add_subdirectory(src/capture)
 
