@@ -38,7 +38,7 @@ The sysroot is built by mirroring the Jetson root filesystem with `rsync`, then 
 Run these inside the cross-compilation container. The build expects:
 
 * Sysroot: `/opt/jetson-sysroot`
-* Overlay: `/opt/jetson-sysroot/edgevision`
+* Overlay: `/opt/jetson-sysroot-overlay`
 
 The rsynced filesystem contains absolute symlinks (e.g. `/lib/...`) which break relocation.
 
@@ -190,7 +190,7 @@ cmake -S cmake/third_party \
   -B build-deps \
   -G Ninja \
   -DCMAKE_BUILD_TYPE=Release \
-  -DCMAKE_INSTALL_PREFIX=/opt/jetson-sysroot/edgevision/install \
+  -DCMAKE_INSTALL_PREFIX=/opt/jetson-sysroot-overlay/install \
   -DCMAKE_TOOLCHAIN_FILE=/workspaces/repo/toolchains/jetson/jetson-aarch64.cmake \
 && cmake --build build-deps --target install
 
@@ -199,7 +199,6 @@ cmake -S . \
   -B build \
   -G Ninja \
   -DCMAKE_TOOLCHAIN_FILE=/workspaces/repo/toolchains/jetson/jetson-aarch64.cmake \
-  -DTORCH_RUNTIME_LIB_DIR=/site-packages/torch/lib \
   -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
   && cmake --build build
 
@@ -207,6 +206,8 @@ cmake -S . \
 cmake --build /workspaces/repo/toolchain-tests/build
 cmake --build build-deps --target install
 cmake --build build
+# Build to bundle for export
+cmake --build build --target bundle
 ```
 
 Then restart clangd extension in vscode.

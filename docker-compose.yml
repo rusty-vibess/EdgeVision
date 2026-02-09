@@ -10,7 +10,7 @@ services:
       - .:/workspaces/repo:cached
       # Mount target sysroot and dependency overlay
       - ./sysroots/r36.4.4:/opt/jetson-sysroot:cached
-      - ./third_party/r36.4.4-overlay:/opt/jetson-sysroot/edgevision:cached
+      - ./third_party/r36.4.4-overlay:/opt/jetson-sysroot-overlay:cached
     working_dir: /workspaces/repo
     tty: true
     stdin_open: true

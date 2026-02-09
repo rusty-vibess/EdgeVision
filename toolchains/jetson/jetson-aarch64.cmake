@@ -3,7 +3,7 @@ set(CMAKE_SYSTEM_PROCESSOR aarch64)
 
 # Sysroot and required dependency overlay
 set(CMAKE_SYSROOT "/opt/jetson-sysroot")
-set(SYSROOT_OVERLAY "/opt/jetson-sysroot/edgevision")
+set(SYSROOT_OVERLAY "/opt/jetson-sysroot-overlay")
 
 set(CMAKE_C_COMPILER   aarch64-linux-gnu-gcc)
 set(CMAKE_CXX_COMPILER aarch64-linux-gnu-g++)
@@ -19,6 +19,8 @@ set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
 set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
 set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
 set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY)
+
+set(Torch_DIR "/opt/jetson-sysroot-overlay/install/share/cmake/Torch" CACHE PATH "Torch CMake config dir")
 
 set(CUDA_NVCC_EXECUTABLE "/opt/jetson-sysroot/usr/local/cuda-12.6/bin/nvcc")
 set(CMAKE_CUDA_COMPILER "/opt/jetson-sysroot/usr/local/cuda-12.6/bin/nvcc")

@@ -3,10 +3,12 @@ project(third_party LANGUAGES C CXX)
 
 # Install prefix (can be overridden by -DCMAKE_INSTALL_PREFIX=...)
 set(CMAKE_INSTALL_PREFIX
-    "/opt/jetson-sysroot/edgevision/install"
+    "/opt/jetson-sysroot-overlay/install"
     CACHE PATH "Third-party install prefix" FORCE)
 
+# Include cmake for deps to be pulled in
 include(extern/k4a.cmake)
+include(extern/torch.cmake)
 
 
 # ---- Apply third_party patches ----

@@ -1,7 +1,7 @@
 ### Third Party
 
 External dependencies live here, grouped by sysroot version. `docker-compose.yml` mounts
-`third_party/<SYSROOT_VERSION>-overlay` at `/opt/jetson-sysroot/edgevision`.
+`third_party/<SYSROOT_VERSION>-overlay` at `/opt/jetson-sysroot-overlay`.
 
 ---
 
@@ -44,5 +44,5 @@ root README build section for the exact command. Add the resulting `install/` to
 
 #### Intended layout
 
-* Python wheels: `/opt/jetson-sysroot/edgevision/site-packages`
-* Installed deps: `/opt/jetson-sysroot/edgevision/install`
+* Python wheels: `/opt/jetson-sysroot-overlay/site-packages`
+* Installed deps: `/opt/jetson-sysroot-overlay/install`

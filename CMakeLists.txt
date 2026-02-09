@@ -54,8 +54,25 @@ project(EdgeVision LANGUAGES CXX)
 
 add_executable(EdgeVision src/main.cpp)
 # third_party deps install
-list(APPEND CMAKE_PREFIX_PATH "/opt/jetson-sysroot/edgevision/install")
+list(APPEND CMAKE_PREFIX_PATH "/opt/jetson-sysroot-overlay/install")
+# Torch being lower in the superbuild caused strange issues hence find_package here
+find_package(Torch CONFIG REQUIRED)
 
 add_subdirectory(src/capture)
 
 target_link_libraries(EdgeVision PRIVATE capture)
+
+# ---- Bundle ----
+# Creates a self-contained bundle without affecting normal build/install
+set(EDGEVISION_OVERLAY_ROOT "/opt/jetson-sysroot-overlay" CACHE PATH "Overlay root to bundle from")
+set(EDGEVISION_BUNDLE_DIR "${CMAKE_BINARY_DIR}/bundle" CACHE PATH "Bundle output directory")
+
+add_custom_target(bundle
+    COMMAND
+        "${CMAKE_COMMAND}"
+        -D EDGEVISION_OVERLAY_ROOT="${EDGEVISION_OVERLAY_ROOT}"
+        -D EDGEVISION_BUNDLE_DIR="${EDGEVISION_BUNDLE_DIR}"
+        -D EDGEVISION_BINARY="$<TARGET_FILE:EdgeVision>"
+        -P "${CMAKE_CURRENT_LIST_DIR}/cmake/bundle.cmake"
+    DEPENDS EdgeVision
+)
