@@ -1,6 +1,6 @@
 #include "CameraCapture.hpp"
 
-CameraCapture::CameraCapture() = default;
+CameraCapture::CameraCapture(const k4aInterface& api) : m_api(api) {}
 
 CameraCapture::~CameraCapture() {
     stop();
@@ -16,7 +16,7 @@ bool CameraCapture::open(uint32_t deviceIndex) {
         return true;
     }
 
-    if (k4a_device_open(deviceIndex, &m_device) != K4A_RESULT_SUCCEEDED) {
+    if (m_api.deviceOpen(deviceIndex, &m_device) != K4A_RESULT_SUCCEEDED) {
         m_device = nullptr;
         return false;
     }
@@ -32,7 +32,7 @@ bool CameraCapture::start(const k4a_device_configuration_t& config) {
         return true;
     }
 
-    if (k4a_device_start_cameras(m_device, &config) != K4A_RESULT_SUCCEEDED) {
+    if (m_api.deviceStartCameras(m_device, &config) != K4A_RESULT_SUCCEEDED) {
         return false;
     }
     m_config = config;
@@ -45,7 +45,7 @@ void CameraCapture::stop() {
         return;
     }
 
-    k4a_device_stop_cameras(m_device);
+    m_api.deviceStopCameras(m_device);
     m_started = false;
 }
 
@@ -54,7 +54,7 @@ void CameraCapture::close() {
         return;
     }
 
-    k4a_device_close(m_device);
+    m_api.deviceClose(m_device);
     m_device = nullptr;
     m_started = false;
 }
@@ -72,7 +72,7 @@ bool CameraCapture::capture(k4a_capture_t& outCapture, int32_t timeoutMs) const 
         return false;
     }
 
-    const k4a_wait_result_t result = k4a_device_get_capture(m_device, &outCapture, timeoutMs);
+    const k4a_wait_result_t result = m_api.deviceGetCapture(m_device, &outCapture, timeoutMs);
     return result == K4A_WAIT_RESULT_SUCCEEDED;
 }
 
@@ -81,7 +81,7 @@ bool CameraCapture::getCalibration(k4a_calibration_t& outCalibration) const {
         return false;
     }
 
-    return k4a_device_get_calibration(
+    return m_api.deviceGetCalibration(
                m_device, m_config.depth_mode, m_config.color_resolution, &outCalibration
            )
         == K4A_RESULT_SUCCEEDED;
