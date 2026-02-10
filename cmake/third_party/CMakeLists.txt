@@ -8,7 +8,7 @@ set(CMAKE_INSTALL_PREFIX
 
 # Include cmake for deps to be pulled in
 include(extern/k4a.cmake)
-include(extern/torch.cmake)
+# include(extern/torch.cmake)
 
 
 # ---- Apply third_party patches ----

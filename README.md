@@ -177,6 +177,7 @@ ln -s .../build/compile_commands.json .
 Quick commands you may want to grab:
 
 ```bash
+# TODO: Toolchain-tests need to be updated to new linking methods
 # Configure + build toolchain tests
 cmake -S /workspaces/repo/toolchain-tests \
   -B /workspaces/repo/toolchain-tests/build \
@@ -211,3 +212,13 @@ cmake --build build --target bundle
 ```
 
 Then restart clangd extension in vscode.
+
+---
+
+### Tests
+
+Tests are built by default. If building for `Release` or you do not want tests ensure to pass `-DENABLE_TESTS=ON` at configuration time.
+
+Tests if available will automatically be bundle but the bundler `cmake --build build --target bundle`.
+
+To run tests utilise `ctest --test-dir bundle/tests/tests/ --output-on-failure` inside the target device.

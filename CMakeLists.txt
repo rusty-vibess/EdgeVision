@@ -52,11 +52,21 @@ endif()
 # ----- PROJECT -----
 project(EdgeVision LANGUAGES CXX)
 
+# ---- Custom Functions ----
+# Provides fns required for bundling tests
+include(cmake/functions/test_registry.cmake)
+
+# ---- Tests ----
+option(ENABLE_TESTS "Build unit tests" ON)
+if(ENABLE_TESTS)
+    enable_testing()
+endif()
+
 add_executable(EdgeVision src/main.cpp)
 # third_party deps install
 list(APPEND CMAKE_PREFIX_PATH "/opt/jetson-sysroot-overlay/install")
 # Torch being lower in the superbuild caused strange issues hence find_package here
-find_package(Torch CONFIG REQUIRED)
+# find_package(Torch CONFIG REQUIRED)
 
 add_subdirectory(src/capture)
 
@@ -67,12 +77,18 @@ target_link_libraries(EdgeVision PRIVATE capture)
 set(EDGEVISION_OVERLAY_ROOT "/opt/jetson-sysroot-overlay" CACHE PATH "Overlay root to bundle from")
 set(EDGEVISION_BUNDLE_DIR "${CMAKE_BINARY_DIR}/bundle" CACHE PATH "Bundle output directory")
 
+collect_test_registry()
 add_custom_target(bundle
     COMMAND
         "${CMAKE_COMMAND}"
         -D EDGEVISION_OVERLAY_ROOT="${EDGEVISION_OVERLAY_ROOT}"
         -D EDGEVISION_BUNDLE_DIR="${EDGEVISION_BUNDLE_DIR}"
         -D EDGEVISION_BINARY="$<TARGET_FILE:EdgeVision>"
+        -D EDGEVISION_EXTRA_BINARIES="$<$<BOOL:${ENABLE_TESTS}>:${EDGEVISION_TEST_BINARIES}>"
         -P "${CMAKE_CURRENT_LIST_DIR}/cmake/bundle.cmake"
     DEPENDS EdgeVision
 )
+
+if(ENABLE_TESTS AND EDGEVISION_TEST_TARGETS)
+    add_dependencies(bundle ${EDGEVISION_TEST_TARGETS})
+endif()
