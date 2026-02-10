@@ -1,12 +1,14 @@
 #pragma once
 
 #include <cstdint>
-#include <k4a/k4a.h>
+
+#include "interfaces/k4a.hpp"
 
 class CameraCapture {
   public:
-    CameraCapture();
+    explicit CameraCapture(const k4aInterface& api = k4aInterface::instance());
     ~CameraCapture();
+
     CameraCapture(const CameraCapture&) = delete;
     CameraCapture& operator=(const CameraCapture&) = delete;
 
@@ -28,6 +30,7 @@ class CameraCapture {
     [[nodiscard]] k4a_device_t device() const;
 
   private:
+    const k4aInterface& m_api;
     k4a_device_t m_device = nullptr;
     bool m_started = false;
     k4a_device_configuration_t m_config = K4A_DEVICE_CONFIG_INIT_DISABLE_ALL;

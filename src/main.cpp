@@ -4,11 +4,11 @@
 #include "FrameBuilder.hpp"
 
 int main() {
-    CameraCapture camera;
-    FrameBuilder builder;
+    // CameraCapture camera;
+    // FrameBuilder builder;
 
-    std::cout << camera.status() << "\n";
-    std::cout << builder.version() << "\n";
+    // std::cout << camera.status() << "\n";
+    // std::cout << builder.version() << "\n";
 
     return 0;
 }
