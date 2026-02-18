@@ -1,5 +1,5 @@
 add_executable(capture_tests
-  CameraCapture.cpp
+    CameraCapture.cpp
 )
 
 target_link_libraries(capture_tests PRIVATE capture)
