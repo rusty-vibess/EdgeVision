@@ -46,3 +46,6 @@ root README build section for the exact command. Add the resulting `install/` to
 
 * Python wheels: `/opt/jetson-sysroot-overlay/site-packages`
 * Installed deps: `/opt/jetson-sysroot-overlay/install`
+* Closed source deps: `/opt/jetson-sysroot-overlay/lib`
+
+ Some binaries are proprietary and just a nightmare to get ahold of so they're provided for easy under `third_party/lib`. However it's worth noting they may not be valid for all architectures. Provided binaries will be Ubuntu 20.04 aarch64 libs, consider acquiring your own libs if your target does not match. 
