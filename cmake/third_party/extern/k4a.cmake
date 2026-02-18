@@ -45,11 +45,11 @@ include(FetchContent)
 set(LINUX ON CACHE BOOL "" FORCE)
 
 # ---- Fetch k4a ----
-message(CHECK_START "Fetching Azure Kinect SDK (k4a) v1.4.2...")
+message(CHECK_START "Fetching Azure Kinect SDK (k4a)...")
 FetchContent_Declare(
     k4a
     GIT_REPOSITORY https://github.com/microsoft/Azure-Kinect-Sensor-SDK.git
-    GIT_TAG v1.4.2
+    GIT_TAG v1.4.1
 )
 
 # Populate so patches can be applied to internal files
@@ -88,4 +88,11 @@ if(TARGET k4aviewer)
         "${CMAKE_SYSROOT}/usr/include/soundio"
     )
     target_link_libraries(k4aviewer PRIVATE soundio)
+endif()
+
+if(TARGET k4a)
+    set_target_properties(k4a PROPERTIES
+        BUILD_RPATH "\$ORIGIN"
+        INSTALL_RPATH "\$ORIGIN"
+    )
 endif()
