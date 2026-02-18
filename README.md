@@ -1,3 +1,14 @@
+### Workflow (Recommended)
+
+1. Create or update the sysroot (see "Sysroot").
+2. Populate the overlay in `third_party/<SYSROOT_VERSION>-overlay`.
+3. Add Python wheels (see "Sysroot" → Overlay).
+4. Build source deps (see "Building" → Build Deps).
+5. Run toolchain smoke tests.
+6. Build the project.
+
+---
+
 ### Sysroot
 
 We cross-compile against a Jetson sysroot (JetPack r36.4.4 at time of writing) so the toolchain always sees the same headers, libraries, and linker layout—independent of the host.
@@ -14,10 +25,10 @@ The sysroot is built by mirroring the Jetson root filesystem with `rsync`, then 
 # --numeric-ids preserves UID/GID consistency between host and target
 /opt/homebrew/bin/rsync -aH --numeric-ids --info=progress2 \
   --exclude={"/dev/*","/proc/*","/sys/*","/run/*","/tmp/*","/media/*","/mnt/*","/lost+found"} \
-  <USER>@<JETSON_IP>:/ ./sysroots/<VERSION>
-````
+  <USER>@<JETSON_IP>:/ ./sysroots/<SYSROOT_VERSION>
+```
 
-* Result: `./sysroots/<VERSION>` is a snapshot of the Jetson userspace
+* Result: `./sysroots/<SYSROOT_VERSION>` is a snapshot of the Jetson userspace
 * Exclusions: virtual filesystems + runtime-only mounts
 
 ---
@@ -32,14 +43,14 @@ Run these inside the cross-compilation container. The build expects:
 The rsynced filesystem contains absolute symlinks (e.g. `/lib/...`) which break relocation.
 
 ```bash
-symlinks -crv ./sysroots/<VERSION>
+symlinks -crv ./sysroots/<SYSROOT_VERSION>
 ```
 
 `update-alternatives` stores absolute paths that survive both `rsync` and symlink rewriting.
 
 ```bash
 # DRY_RUN=1 previews changes without mutating files
-SYSROOT=/workspaces/repo/sysroots/<VERSION> DRY_RUN=1 \
+SYSROOT=/workspaces/repo/sysroots/<SYSROOT_VERSION> DRY_RUN=1 \
   /workspaces/repo/scripts/rewrite-alternatives.sh
 ```
 
@@ -69,11 +80,11 @@ pip install torch==2.8.0 --index-url https://pypi.jetson-ai-lab.io/jp6/cu126
 Copy into the project overlay:
 
 * From: `<VENV>/lib/python3.10/site-packages/torch`
-* To: `third_party/<VERSION>-overlay/site-packages/torch`
+* To: `third_party/<SYSROOT_VERSION>-overlay/site-packages/torch`
 
 ---
 
-### Toolchain smoke tests
+### Toolchain Smoke Tests
 
 Configure:
 
@@ -82,8 +93,7 @@ cmake -S /workspaces/repo/toolchain-tests \
   -B /workspaces/repo/toolchain-tests/build \
   -G Ninja \
   -DCMAKE_TOOLCHAIN_FILE=/workspaces/repo/toolchains/jetson/jetson-aarch64.cmake \
-  # Overlay libs may require paths being specified for RPath linking
-  -DTORCH_RUNTIME_LIB_DIR=<TORCH_RUNTIME_LIB_DIR>
+  -DTORCH_RUNTIME_LIB_DIR=/site-packages/torch/lib
 ```
 
 If reconfiguring from scratch:
@@ -100,7 +110,32 @@ cmake --build /workspaces/repo/toolchain-tests/build
 
 ---
 
-### Container workflow
+### Building
+
+#### Build Deps
+
+```bash
+cmake -S cmake/third_party \
+  -B build-deps \
+  -G Ninja \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_INSTALL_PREFIX=/path/to/install \
+  -DCMAKE_TOOLCHAIN_FILE=/workspaces/repo/toolchains/jetson/jetson-aarch64.cmake \
+&& cmake --build build-deps --target install
+```
+
+#### Patches
+Some deps require source changes. Use patches to capture those diffs, place them in
+`patches/`, and ensure they are collected and applied by the build.
+
+Generate patches like this:
+```bash
+diff -u   .../<FILE>.orig   .../<FILE>   > /workspaces/repo/patches/<FILE>-<STUB>.patch
+```
+
+---
+
+### Container Workflow
 Since this repo uses `.devcontainer`, it’s recommended to let the VS Code extension handle container lifecycle.
 
 Information for manual container management:
@@ -116,8 +151,6 @@ docker buildx inspect --bootstrap
 docker compose build
 docker compose up
 ```
-
-
 Shell access:
 
 ```bash
@@ -128,11 +161,64 @@ docker exec -it jetson-dev bash
 
 ### Dev Info
 
-For LSP support you'll require a `compile_commands.json` at root, the simplest way to get this is when we configure our cmake pass the `-DCMAKE_EXPORT_COMPILE_COMMANDS=ON` flag and then create a symbolic link to the produced file.
+For LSP support, you need a `compile_commands.json` at the repo root. The simplest
+way is to configure with `-DCMAKE_EXPORT_COMPILE_COMMANDS=ON` and then symlink the
+generated file.
 
 ```bash
 # From repo root
 ln -s .../build/compile_commands.json .
 ```
 
+---
+
+### Cheatsheet
+
+Quick commands you may want to grab:
+
+```bash
+# TODO: Toolchain-tests need to be updated to new linking methods
+# Configure + build toolchain tests
+cmake -S /workspaces/repo/toolchain-tests \
+  -B /workspaces/repo/toolchain-tests/build \
+  -G Ninja \
+  -DCMAKE_TOOLCHAIN_FILE=/workspaces/repo/toolchains/jetson/jetson-aarch64.cmake \
+  -DTORCH_RUNTIME_LIB_DIR=/site-packages/torch/lib \
+  && cmake --build /workspaces/repo/toolchain-tests/build
+
+# Configure + build third-party deps into the overlay
+cmake -S cmake/third_party \
+  -B build-deps \
+  -G Ninja \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_INSTALL_PREFIX=/opt/jetson-sysroot-overlay/install \
+  -DCMAKE_TOOLCHAIN_FILE=/workspaces/repo/toolchains/jetson/jetson-aarch64.cmake \
+&& cmake --build build-deps --target install
+
+# Configure + build project
+cmake -S . \
+  -B build \
+  -G Ninja \
+  -DCMAKE_TOOLCHAIN_FILE=/workspaces/repo/toolchains/jetson/jetson-aarch64.cmake \
+  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+  && cmake --build build
+
+# Individual build commands
+cmake --build /workspaces/repo/toolchain-tests/build
+cmake --build build-deps --target install
+cmake --build build
+# Build to bundle for export
+cmake --build build --target bundle
+```
+
 Then restart clangd extension in vscode.
+
+---
+
+### Tests
+
+Tests are built by default. If building for `Release` or you do not want tests ensure to pass `-DENABLE_TESTS=ON` at configuration time.
+
+Tests if available will automatically be bundle but the bundler `cmake --build build --target bundle`.
+
+To run tests utilise `ctest --test-dir bundle/tests/tests/ --output-on-failure` inside the target device.

@@ -20,6 +20,8 @@ set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
 set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
 set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY)
 
+set(Torch_DIR "/opt/jetson-sysroot-overlay/install/share/cmake/Torch" CACHE PATH "Torch CMake config dir")
+
 set(CUDA_NVCC_EXECUTABLE "/opt/jetson-sysroot/usr/local/cuda-12.6/bin/nvcc")
 set(CMAKE_CUDA_COMPILER "/opt/jetson-sysroot/usr/local/cuda-12.6/bin/nvcc")
 
@@ -33,4 +35,3 @@ list(PREPEND CMAKE_LIBRARY_PATH "/usr/local/cuda-12.6/targets/aarch64-linux/lib/
 set(CUDA_CUDART_LIBRARY "/usr/local/cuda-12.6/targets/aarch64-linux/lib/libcudart.so")
 list(PREPEND CMAKE_LIBRARY_PATH "/usr/local/cuda-12.6/lib64")
 list(PREPEND CMAKE_INCLUDE_PATH "/usr/local/cuda-12.6/include")
-
