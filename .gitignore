@@ -3,12 +3,15 @@
 
 # build and cmake
 build
+build-deps
 .cache
+compile_commands.json
 
 # sysroots
 sysroots
 
-# dep objects
-third_party
-site-packages
+# sysroot overlays
+*-overlay
 
+# testing junk
+Testing
