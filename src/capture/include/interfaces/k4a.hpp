@@ -8,7 +8,7 @@ class k4aInterface {
 
     virtual k4a_result_t deviceOpen(uint32_t deviceIndex, k4a_device_t* device) const = 0;
     virtual void deviceClose(k4a_device_t device) const = 0;
-    virtual k4a_result_t deviceStartCameras(
+    virtual bool deviceStartCameras(
         k4a_device_t device,
         const k4a_device_configuration_t* config
     ) const = 0;

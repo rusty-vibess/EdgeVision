@@ -1,5 +1,9 @@
 #include "interfaces/k4a.hpp"
 
+#include <iostream>
+
+#include "logger.hpp"
+
 namespace {
     /// Provides the default k4a interface implementation that forwards to the SDK.
     class k4aInterfaceImpl final : public k4aInterface {
@@ -12,11 +16,23 @@ namespace {
             k4a_device_close(device);
         }
 
-        k4a_result_t deviceStartCameras(
+        bool deviceStartCameras(
             k4a_device_t device,
             const k4a_device_configuration_t* config
         ) const override {
-            return k4a_device_start_cameras(device, config);
+            const k4a_result_t startResult = k4a_device_start_cameras(device, config);
+            if (startResult != K4A_RESULT_SUCCEEDED) {
+                LOG(LogLevel::error, "k4a", "Failed to start camera");
+                return false;
+            };
+
+            const k4a_result_t imuResult = k4a_device_start_imu(device);
+            if (imuResult != K4A_RESULT_SUCCEEDED) {
+                LOG(LogLevel::error, "k4a", "Failed to start IMU");
+                return false;
+            };
+
+            return true;
         }
 
         void deviceStopCameras(k4a_device_t device) const override {

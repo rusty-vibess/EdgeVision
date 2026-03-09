@@ -1,6 +1,6 @@
 #pragma once
 
-class FrameBuilder {
+class Frame {
   public:
     int version() const;
 };

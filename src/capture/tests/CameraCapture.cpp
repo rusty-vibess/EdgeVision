@@ -121,7 +121,7 @@ namespace {
 
     void testOpenSuccess() {
         FakeK4aApi api;
-        CameraCapture capture(api);
+        Camera capture(api);
 
         EXPECT_TRUE(capture.open(2));
         EXPECT_TRUE(capture.isOpen());
@@ -132,7 +132,7 @@ namespace {
     void testOpenFailure() {
         FakeK4aApi api;
         api.openResult = K4A_RESULT_FAILED;
-        CameraCapture capture(api);
+        Camera capture(api);
 
         EXPECT_FALSE(capture.open(1));
         EXPECT_FALSE(capture.isOpen());
@@ -141,7 +141,7 @@ namespace {
 
     void testStartRequiresOpen() {
         FakeK4aApi api;
-        CameraCapture capture(api);
+        Camera capture(api);
         k4a_device_configuration_t config = K4A_DEVICE_CONFIG_INIT_DISABLE_ALL;
 
         EXPECT_FALSE(capture.start(config));
@@ -150,7 +150,7 @@ namespace {
 
     void testStartIdempotent() {
         FakeK4aApi api;
-        CameraCapture capture(api);
+        Camera capture(api);
         k4a_device_configuration_t config = K4A_DEVICE_CONFIG_INIT_DISABLE_ALL;
 
         EXPECT_TRUE(capture.open());
@@ -164,7 +164,7 @@ namespace {
 
     void testStopIdempotent() {
         FakeK4aApi api;
-        CameraCapture capture(api);
+        Camera capture(api);
         k4a_device_configuration_t config = K4A_DEVICE_CONFIG_INIT_DISABLE_ALL;
 
         EXPECT_TRUE(capture.open());
@@ -179,7 +179,7 @@ namespace {
 
     void testCaptureGuards() {
         FakeK4aApi api;
-        CameraCapture capture(api);
+        Camera capture(api);
         k4a_capture_t outCapture = nullptr;
 
         EXPECT_FALSE(capture.capture(outCapture, 10));
@@ -203,7 +203,7 @@ namespace {
 
     void testCalibrationUsesConfig() {
         FakeK4aApi api;
-        CameraCapture capture(api);
+        Camera capture(api);
         k4a_device_configuration_t config = K4A_DEVICE_CONFIG_INIT_DISABLE_ALL;
         config.depth_mode = K4A_DEPTH_MODE_WFOV_2X2BINNED;
         config.color_resolution = K4A_COLOR_RESOLUTION_1080P;
@@ -220,7 +220,7 @@ namespace {
 
     void testCloseResetsState() {
         FakeK4aApi api;
-        CameraCapture capture(api);
+        Camera capture(api);
         k4a_device_configuration_t config = K4A_DEVICE_CONFIG_INIT_DISABLE_ALL;
 
         EXPECT_TRUE(capture.open());

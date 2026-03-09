@@ -1,6 +1,6 @@
 # ----- FLAGS -----
 cmake_minimum_required(VERSION 3.16)
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # ---- Build Config ----
@@ -68,9 +68,10 @@ list(APPEND CMAKE_PREFIX_PATH "/opt/jetson-sysroot-overlay/install")
 # Torch being lower in the superbuild caused strange issues hence find_package here
 # find_package(Torch CONFIG REQUIRED)
 
+add_subdirectory(src/utils)
 add_subdirectory(src/capture)
 
-target_link_libraries(EdgeVision PRIVATE capture)
+target_link_libraries(EdgeVision PRIVATE capture logs)
 
 # ---- Bundle ----
 # Creates a self-contained bundle without affecting normal build/install
