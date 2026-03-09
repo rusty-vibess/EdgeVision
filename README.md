@@ -84,7 +84,7 @@ Copy into the project overlay:
 
 ---
 
-### Toolchain Smoke Tests
+### Toolchain Smoke Tests (NEEDS UPDATE)
 
 Configure:
 
@@ -156,6 +156,36 @@ Shell access:
 ```bash
 docker exec -it jetson-dev bash
 ```
+
+### Runtime Info
+
+`k4a` requires OpenGL.
+OpenGL (via GLX) requires an active X11 `DISPLAY` context.
+
+On Jetson, X will not start unless a display is detected. In a headless build, you must either:
+* Plug the Jetson into a monitor via DisplayPort, or
+* Use a headless DP dongle that spoofs EDID
+
+There is no runtime-only software workaround if the dependency requires GLX.
+
+Creating the required DISPLAY context from terminal:
+```bash
+# JetPack boots gdm3 automatically when a display is detected — stop it
+sudo systemctl stop gdm3
+
+# (Optional) prevent it restarting on reboot
+# sudo systemctl disable gdm3
+
+# Confirm no X11 instances are running
+ls /tmp/.X11-unix/
+# Start a minimal X server
+Xorg :0 -nolisten tcp &
+# Set DISPLAY for this shell
+export DISPLAY=:0
+# Confirm hardware OpenGL is active
+glxinfo | grep "OpenGL renderer"
+```
+You should see the NVIDIA / Tegra renderer — not `llvmpipe`.
 
 ---
 
