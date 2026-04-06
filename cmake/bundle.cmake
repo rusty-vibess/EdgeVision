@@ -15,6 +15,34 @@ endif()
 # Install dir of deps
 set(EDGEVISION_INSTALL_DIR "${EDGEVISION_OVERLAY_ROOT}/install")
 
+# ---- Handle setting RPATH values ----
+function(_edgevision_set_bundle_rpath file_path)
+    if(NOT UNIX OR APPLE)
+        return()
+    endif()
+
+    find_program(_edgevision_objdump NAMES objdump llvm-objdump)
+    if(NOT _edgevision_objdump)
+        message(STATUS "Skipping RPATH rewrite for '${file_path}': no objdump tool available")
+        return()
+    endif()
+
+    execute_process(
+        COMMAND "${_edgevision_objdump}" -p "${file_path}"
+        OUTPUT_VARIABLE _edgevision_objdump_output
+        ERROR_QUIET
+        RESULT_VARIABLE _edgevision_objdump_result
+    )
+
+    if(_edgevision_objdump_result EQUAL 0 AND _edgevision_objdump_output MATCHES "(RPATH|RUNPATH)")
+        file(RPATH_SET FILE "${file_path}" NEW_RPATH "\$ORIGIN/../lib")
+    elseif(_edgevision_objdump_result EQUAL 0)
+        message(STATUS "Skipping RPATH rewrite for '${file_path}': no existing ELF RPATH/RUNPATH entry")
+    else()
+        message(STATUS "Skipping RPATH rewrite for '${file_path}': failed to inspect binary with objdump")
+    endif()
+endfunction()
+
 file(MAKE_DIRECTORY "${EDGEVISION_BUNDLE_DIR}/bin")
 file(MAKE_DIRECTORY "${EDGEVISION_BUNDLE_DIR}/lib")
 file(MAKE_DIRECTORY "${EDGEVISION_BUNDLE_DIR}/tests")
@@ -23,9 +51,7 @@ if(EXISTS "${EDGEVISION_BINARY}")
     file(COPY "${EDGEVISION_BINARY}" DESTINATION "${EDGEVISION_BUNDLE_DIR}/bin")
     get_filename_component(_edgevision_bin_name "${EDGEVISION_BINARY}" NAME)
     set(_edgevision_bundle_bin "${EDGEVISION_BUNDLE_DIR}/bin/${_edgevision_bin_name}")
-    if(UNIX AND NOT APPLE)
-        file(RPATH_SET FILE "${_edgevision_bundle_bin}" NEW_RPATH "\$ORIGIN/../lib")
-    endif()
+    _edgevision_set_bundle_rpath("${_edgevision_bundle_bin}")
 else()
     message(FATAL_ERROR "EdgeVision binary not found at ${EDGEVISION_BINARY}")
 endif()
@@ -35,9 +61,7 @@ foreach(_extra_bin IN LISTS EDGEVISION_EXTRA_BINARIES)
         file(COPY "${_extra_bin}" DESTINATION "${EDGEVISION_BUNDLE_DIR}/tests")
         get_filename_component(_extra_bin_name "${_extra_bin}" NAME)
         set(_extra_bundle_bin "${EDGEVISION_BUNDLE_DIR}/tests/${_extra_bin_name}")
-        if(UNIX AND NOT APPLE)
-            file(RPATH_SET FILE "${_extra_bundle_bin}" NEW_RPATH "\$ORIGIN/../lib")
-        endif()
+        _edgevision_set_bundle_rpath("${_extra_bundle_bin}")
     else()
         message(FATAL_ERROR "Extra binary not found at ${_extra_bin}")
     endif()

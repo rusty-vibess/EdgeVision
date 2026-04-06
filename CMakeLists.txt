@@ -69,8 +69,10 @@ list(APPEND CMAKE_PREFIX_PATH "/opt/jetson-sysroot-overlay/install")
 # find_package(Torch CONFIG REQUIRED)
 
 add_subdirectory(src/capture)
+add_subdirectory(src/reconstruction)
 
 target_link_libraries(EdgeVision PRIVATE capture)
+target_link_libraries(EdgeVision PRIVATE reconstruction)
 
 # ---- Bundle ----
 # Creates a self-contained bundle without affecting normal build/install
@@ -78,13 +80,23 @@ set(EDGEVISION_OVERLAY_ROOT "/opt/jetson-sysroot-overlay" CACHE PATH "Overlay ro
 set(EDGEVISION_BUNDLE_DIR "${CMAKE_BINARY_DIR}/bundle" CACHE PATH "Bundle output directory")
 
 collect_test_registry()
+set(_edgevision_bundle_extra_binaries "")
+if(ENABLE_TESTS)
+    foreach(_test_target IN LISTS EDGEVISION_TEST_TARGETS)
+        if(_edgevision_bundle_extra_binaries)
+            string(APPEND _edgevision_bundle_extra_binaries "$<SEMICOLON>")
+        endif()
+        string(APPEND _edgevision_bundle_extra_binaries "$<TARGET_FILE:${_test_target}>")
+    endforeach()
+endif()
+
 add_custom_target(bundle
     COMMAND
     "${CMAKE_COMMAND}"
     -D EDGEVISION_OVERLAY_ROOT="${EDGEVISION_OVERLAY_ROOT}"
     -D EDGEVISION_BUNDLE_DIR="${EDGEVISION_BUNDLE_DIR}"
     -D EDGEVISION_BINARY="$<TARGET_FILE:EdgeVision>"
-    -D EDGEVISION_EXTRA_BINARIES="$<$<BOOL:${ENABLE_TESTS}>:${EDGEVISION_TEST_BINARIES}>"
+    -D EDGEVISION_EXTRA_BINARIES="${_edgevision_bundle_extra_binaries}"
     -P "${CMAKE_CURRENT_LIST_DIR}/cmake/bundle.cmake"
     DEPENDS EdgeVision
 )
