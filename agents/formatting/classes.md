@@ -5,4 +5,4 @@
 3. Please utilise type hits where neccessary like `[[nodiscard]]`.
 4. Class members should be prepended with `m_someVar`, this indicates a class member.
 5. We prefer references over pointers for function arguments, as they're safer and avoid unnecessary `null_ptr` checks.
-
+6. Abstract interfaces should use the repo interface layout conventions in `include/interfaces` and `src/interfaces`.
