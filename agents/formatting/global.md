@@ -8,6 +8,17 @@ Ensure to utilise `clang-format`, it should be available to you to call on files
 
 * Utilise smart pointers and references where possible.
 
+* We prefer the `.hpp` / `.cpp` split across the repo for concrete code, even when the implementation is small.
+
+* Header-only files should be reserved for simple transport or value types with little to no business logic.
+
+* Repo structure conventions should be followed consistently:
+  * Types belong under `include/types`.
+  * Abstract interfaces belong under `include/interfaces`.
+  * Abstract interfaces should also have a matching `.cpp` in `src/interfaces` for out-of-line definitions such as destructors.
+
+* Test source file names should match the unit under test directly. Avoid placeholder suffixes such as `Header` in test filenames.
+
 * If statements should be always followed by a new line
 Example:
 ```cpp
