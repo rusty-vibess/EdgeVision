@@ -4,7 +4,7 @@ target_sources(reconstruction PRIVATE
     src/interfaces/GaussianResidualModel.cpp
     src/interfaces/ReconstructionPipeline.cpp
     src/interfaces/TsdfRaycaster.cpp
-    src/ReconstructionPipeline.cpp
+    src/reconstruction/ReconstructionPipeline.cpp
 )
 target_include_directories(reconstruction PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
