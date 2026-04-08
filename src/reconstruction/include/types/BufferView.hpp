@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <torch/torch.h>
 
 template <typename T>
 class BufferView {

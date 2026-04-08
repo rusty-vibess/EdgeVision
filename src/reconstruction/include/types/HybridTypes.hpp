@@ -1,6 +1,6 @@
 #pragma once
 
-#include "types/TsdfTypes.hpp"
+#include "types/ReconstructionObservation.hpp"
 
 struct ResidualSeedConfig {
     float colorErrorThreshold = 0.0f;
@@ -11,8 +11,7 @@ struct ResidualSeedConfig {
 };
 
 struct HybridRenderInput {
-    RgbdFrameView frame{};
-    TsdfRaycastBuffers raycast{};
+    ReconstructionObservation observation{};
     float deltaDepth = 0.0f;
 };
 
