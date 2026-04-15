@@ -239,6 +239,10 @@ cmake --build build-deps --target install
 cmake --build build
 # Build to bundle for export
 cmake --build build --target bundle
+# scp bundle to jetson
+scp -r build/bundle nano:dev/latest_edgevision_bundle
+# scp just latest bin to jetson (saves writes)
+scp -r build/bundle/bin/* nano:dev/latest_edgevision_bundle/bundle/bin
 ```
 
 Then restart clangd extension in vscode.
