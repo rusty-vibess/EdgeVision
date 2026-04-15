@@ -3,9 +3,12 @@
 
 # build and cmake
 build
+build-local
 build-deps
 .cache
 compile_commands.json
+
+# tools
 
 # sysroots
 sysroots
