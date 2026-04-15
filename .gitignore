@@ -3,9 +3,22 @@
 
 # build and cmake
 build
+build-local
 build-deps
+build-xdma
 .cache
 compile_commands.json
+
+# XDMA
+third_party/XDMA/linux-kernel/xdma/*
+!third_party/XDMA/linux-kernel/xdma/*.c
+!third_party/XDMA/linux-kernel/xdma/*.h
+!third_party/XDMA/linux-kernel/xdma/Makefile
+third_party/XDMA/linux-kernel/xdma/*.mod.c
+# tools
+third_party/XDMA/linux-kernel/tools/*
+!third_party/XDMA/linux-kernel/tools/*.c
+!third_party/XDMA/linux-kernel/tools/Makefile
 
 # sysroots
 sysroots
