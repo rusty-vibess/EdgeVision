@@ -1,6 +1,7 @@
 # ---- Subdir Build ----
 add_library(reconstruction)
 target_sources(reconstruction PRIVATE
+    src/gaussian/TorchGaussianResidualModel.cpp
     src/interfaces/GaussianResidualModel.cpp
     src/interfaces/ReconstructionPipeline.cpp
     src/interfaces/TsdfRaycaster.cpp
