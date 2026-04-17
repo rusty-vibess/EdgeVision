@@ -3,8 +3,8 @@
 #include <iostream>
 #include <vector>
 
-#include "RenderServer.hpp"
 #include "reconstruction/TorchGaussianResidualModel.hpp"
+#include "streaming/RenderServer.hpp"
 #include "types/HybridTypes.hpp"
 
 /// Render-server entry point. Starts a TCP server and renders frames via
@@ -32,8 +32,7 @@ int main(int argc, char* argv[]) {
                      "Frames will be empty." << std::endl;
     }
 
-    RenderServer server;
-    server.serve(port, [&model](
+    auto renderThread = startRenderServer(port, [&model](
         const RenderPoseRequest& req,
         std::vector<uint8_t>& rgbOut
     ) -> bool {
@@ -74,6 +73,7 @@ int main(int argc, char* argv[]) {
         }
         return false;
     });
+    renderThread.join();
 
     return 0;
 }
