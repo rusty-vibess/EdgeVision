@@ -70,9 +70,11 @@ find_package(Torch CONFIG REQUIRED)
 
 add_subdirectory(src/capture)
 add_subdirectory(src/reconstruction)
+add_subdirectory(src/streaming)
 
 target_link_libraries(EdgeVision PRIVATE capture)
 target_link_libraries(EdgeVision PRIVATE reconstruction)
+target_link_libraries(EdgeVision PRIVATE streaming)
 
 # ---- Bundle ----
 # Creates a self-contained bundle without affecting normal build/install
