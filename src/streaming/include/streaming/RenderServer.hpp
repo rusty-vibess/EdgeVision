@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <thread>
 #include <vector>
 
 /// Single-client TCP render server. Accepts one client at a time (the
@@ -59,3 +60,5 @@ class RenderServer {
     /// Call from main() after pipeline init.
     void serve(int port, RenderCallback onRender);
 };
+
+[[nodiscard]] std::jthread startRenderServer(int port, RenderCallback onRender);

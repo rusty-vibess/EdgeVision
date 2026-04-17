@@ -2,26 +2,20 @@
 # Single-client TCP server adapted from GPS-SLAM's remote_viewer.cpp.
 # Dependencies:
 #   - POSIX sockets (standard Linux — works on Jetson aarch64, no library)
-#   - nlohmann/json (header-only via FetchContent — no cross-compile concern)
+#   - nlohmann/json (header-only via build-deps overlay install)
 #   - libjpeg (from JetPack sysroot — libjpeg-turbo on Jetson)
 #
 # If libjpeg-dev is missing from the rsync'd sysroot:
 #   apt-get install libjpeg-turbo8-dev   (on the Jetson, then re-rsync)
 
-include(FetchContent)
-FetchContent_Declare(
-    json
-    GIT_REPOSITORY https://github.com/nlohmann/json.git
-    GIT_TAG        v3.11.3
-    GIT_SHALLOW    TRUE
-)
-FetchContent_MakeAvailable(json)
-
+find_package(nlohmann_json CONFIG REQUIRED)
 find_package(JPEG REQUIRED)
 
-add_library(streaming STATIC RenderServer.cpp)
+add_library(streaming STATIC
+    src/streaming/RenderServer.cpp
+)
 target_include_directories(streaming PUBLIC
-    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 target_link_libraries(streaming
     PRIVATE "${TORCH_LIBRARIES}"

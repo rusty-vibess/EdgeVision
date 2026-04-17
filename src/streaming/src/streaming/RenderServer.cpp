@@ -1,4 +1,4 @@
-#include "RenderServer.hpp"
+#include "streaming/RenderServer.hpp"
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -9,6 +9,7 @@
 #include <cstring>
 #include <iostream>
 #include <stdexcept>
+#include <utility>
 #include <vector>
 
 #include <nlohmann/json.hpp>
@@ -212,4 +213,11 @@ void RenderServer::serve(int port, RenderCallback onRender) {
         }
         ::close(clientFd);
     }
+}
+
+std::jthread startRenderServer(int port, RenderCallback onRender) {
+    return std::jthread([port, onRender = std::move(onRender)]() mutable {
+        RenderServer server;
+        server.serve(port, std::move(onRender));
+    });
 }
