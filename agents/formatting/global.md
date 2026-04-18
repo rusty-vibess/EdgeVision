@@ -25,11 +25,16 @@ Ensure to utilise `clang-format`, it should be available to you to call on files
 * Repo structure conventions should be followed consistently:
   * Module-owned public concrete headers belong under `include/<module>`.
   * These headers should be imported via the module path, for example `#include "reconstruction/ReconstructionPipeline.hpp"`.
+  * Domain public APIs belong under `include/<module>/<domain>` and domain public types under `include/<module>/<domain>/types`.
+  * Private implementation headers belong under `src/<module>/src/<domain>/include`.
+  * Domain source roots should contain only top-level API `.cpp` files; helpers belong in broad subdirectories such as `state`, `queue`, or `utils`.
   * Concrete implementation files should mirror that layout under `src/<module>` when they represent module-owned concrete classes.
-  * Types belong under `include/types`.
+  * General shared types belong under `include/types`.
+  * Header-only value/type files without a matching `.cpp` use lowercase filenames.
   * Abstract interfaces belong under `include/interfaces`.
   * Abstract interfaces should also have a matching `.cpp` in `src/interfaces` for out-of-line definitions such as destructors.
   * Tests should mirror the code layout and live under matching subdirectories such as `tests/<module>`, `tests/interfaces`, and `tests/types`.
+  * Do not duplicate semantic transport types with identical shape; use an alias until data or behavior diverges.
 
 * Test source file names should match the unit under test directly. Avoid placeholder suffixes such as `Header` in test filenames.
 
