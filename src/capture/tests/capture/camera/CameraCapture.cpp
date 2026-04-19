@@ -1,5 +1,6 @@
 #include "capture/camera/CameraCapture.hpp"
 
+#include <cstddef>
 #include <cstdint>
 #include <cstdio>
 
@@ -81,6 +82,60 @@ namespace {
             lastDepthMode = depthMode;
             lastColorResolution = colorResolution;
             return calibrationResult;
+        }
+
+        k4a_image_t captureGetColorImage(k4a_capture_t) const override {
+            return nullptr;
+        }
+
+        k4a_image_t captureGetDepthImage(k4a_capture_t) const override {
+            return nullptr;
+        }
+
+        void captureRelease(k4a_capture_t) const override {}
+
+        void imageRelease(k4a_image_t) const override {}
+
+        std::uint8_t* imageGetBuffer(k4a_image_t) const override {
+            return nullptr;
+        }
+
+        std::size_t imageGetSize(k4a_image_t) const override {
+            return 0;
+        }
+
+        int imageGetWidthPixels(k4a_image_t) const override {
+            return 0;
+        }
+
+        int imageGetHeightPixels(k4a_image_t) const override {
+            return 0;
+        }
+
+        int imageGetStrideBytes(k4a_image_t) const override {
+            return 0;
+        }
+
+        k4a_image_format_t imageGetFormat(k4a_image_t) const override {
+            return K4A_IMAGE_FORMAT_CUSTOM;
+        }
+
+        k4a_result_t imageCreate(k4a_image_format_t, int, int, int, k4a_image_t*) const override {
+            return K4A_RESULT_FAILED;
+        }
+
+        k4a_transformation_t transformationCreate(const k4a_calibration_t&) const override {
+            return nullptr;
+        }
+
+        void transformationDestroy(k4a_transformation_t) const override {}
+
+        k4a_result_t transformationDepthImageToColorCamera(
+            k4a_transformation_t,
+            k4a_image_t,
+            k4a_image_t
+        ) const override {
+            return K4A_RESULT_FAILED;
         }
     };
 

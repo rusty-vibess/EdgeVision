@@ -93,4 +93,8 @@ namespace edgevision::capture {
         return m_device;
     }
 
+    k4a_device_configuration_t CameraCapture::config() const {
+        return m_config;
+    }
+
 } // namespace edgevision::capture

@@ -30,6 +30,7 @@ namespace edgevision::capture {
         [[nodiscard]] bool getCalibration(k4a_calibration_t& outCalibration) const;
 
         [[nodiscard]] k4a_device_t device() const;
+        [[nodiscard]] k4a_device_configuration_t config() const;
 
       private:
         const K4aInterface& m_api;
