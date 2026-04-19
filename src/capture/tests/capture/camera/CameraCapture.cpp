@@ -1,9 +1,13 @@
+#include "capture/camera/CameraCapture.hpp"
+
+#include <cstdint>
 #include <cstdio>
 
-#include "CameraCapture.hpp"
+using edgevision::capture::CameraCapture;
+using edgevision::capture::K4aInterface;
 
 namespace {
-    struct FakeK4aApi final : public k4aInterface {
+    struct FakeK4aApi final : public K4aInterface {
         mutable int openCalls = 0;
         mutable uint32_t lastOpenIndex = 0;
         mutable k4a_result_t openResult = K4A_RESULT_SUCCEEDED;
@@ -37,32 +41,27 @@ namespace {
             return openResult;
         }
 
-        void deviceClose(k4a_device_t device) const override {
-            (void)device;
+        void deviceClose(k4a_device_t) const override {
             ++closeCalls;
         }
 
         k4a_result_t deviceStartCameras(
-            k4a_device_t device,
-            const k4a_device_configuration_t* config
+            k4a_device_t,
+            const k4a_device_configuration_t*
         ) const override {
-            (void)device;
-            (void)config;
             ++startCalls;
             return startResult;
         }
 
-        void deviceStopCameras(k4a_device_t device) const override {
-            (void)device;
+        void deviceStopCameras(k4a_device_t) const override {
             ++stopCalls;
         }
 
         k4a_wait_result_t deviceGetCapture(
-            k4a_device_t device,
+            k4a_device_t,
             k4a_capture_t* capture,
             int32_t timeoutMs
         ) const override {
-            (void)device;
             ++getCaptureCalls;
             lastCaptureTimeout = timeoutMs;
             if (capture != nullptr) {
@@ -73,13 +72,11 @@ namespace {
         }
 
         k4a_result_t deviceGetCalibration(
-            k4a_device_t device,
+            k4a_device_t,
             k4a_depth_mode_t depthMode,
             k4a_color_resolution_t colorResolution,
-            k4a_calibration_t* calibration
+            k4a_calibration_t*
         ) const override {
-            (void)device;
-            (void)calibration;
             ++getCalibrationCalls;
             lastDepthMode = depthMode;
             lastColorResolution = colorResolution;

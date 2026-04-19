@@ -4,9 +4,8 @@ find_package(k4a CONFIG REQUIRED)
 # ---- Subdir Build ----
 add_library(capture)
 target_sources(capture PRIVATE
-    src/CameraCapture.cpp
-    src/FrameBuilder.cpp
-    src/interfaces/k4a.cpp
+    src/camera/CameraCapture.cpp
+    src/interfaces/K4aInterface.cpp
 )
 target_include_directories(capture PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
