@@ -41,6 +41,76 @@ namespace edgevision::capture {
             ) const override {
                 return k4a_device_get_calibration(device, depthMode, colorResolution, calibration);
             }
+
+            k4a_image_t captureGetColorImage(k4a_capture_t capture) const override {
+                return k4a_capture_get_color_image(capture);
+            }
+
+            k4a_image_t captureGetDepthImage(k4a_capture_t capture) const override {
+                return k4a_capture_get_depth_image(capture);
+            }
+
+            void captureRelease(k4a_capture_t capture) const override {
+                k4a_capture_release(capture);
+            }
+
+            void imageRelease(k4a_image_t image) const override {
+                k4a_image_release(image);
+            }
+
+            std::uint8_t* imageGetBuffer(k4a_image_t image) const override {
+                return k4a_image_get_buffer(image);
+            }
+
+            std::size_t imageGetSize(k4a_image_t image) const override {
+                return k4a_image_get_size(image);
+            }
+
+            int imageGetWidthPixels(k4a_image_t image) const override {
+                return k4a_image_get_width_pixels(image);
+            }
+
+            int imageGetHeightPixels(k4a_image_t image) const override {
+                return k4a_image_get_height_pixels(image);
+            }
+
+            int imageGetStrideBytes(k4a_image_t image) const override {
+                return k4a_image_get_stride_bytes(image);
+            }
+
+            k4a_image_format_t imageGetFormat(k4a_image_t image) const override {
+                return k4a_image_get_format(image);
+            }
+
+            k4a_result_t imageCreate(
+                k4a_image_format_t format,
+                int widthPixels,
+                int heightPixels,
+                int strideBytes,
+                k4a_image_t* image
+            ) const override {
+                return k4a_image_create(format, widthPixels, heightPixels, strideBytes, image);
+            }
+
+            k4a_transformation_t transformationCreate(
+                const k4a_calibration_t& calibration
+            ) const override {
+                return k4a_transformation_create(&calibration);
+            }
+
+            void transformationDestroy(k4a_transformation_t transformation) const override {
+                k4a_transformation_destroy(transformation);
+            }
+
+            k4a_result_t transformationDepthImageToColorCamera(
+                k4a_transformation_t transformation,
+                k4a_image_t depthImage,
+                k4a_image_t transformedDepthImage
+            ) const override {
+                return k4a_transformation_depth_image_to_color_camera(
+                    transformation, depthImage, transformedDepthImage
+                );
+            }
         };
     } // namespace
 

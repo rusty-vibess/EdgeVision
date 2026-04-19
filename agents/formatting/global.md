@@ -29,6 +29,7 @@ Ensure to utilise `clang-format`, it should be available to you to call on files
   * Module-owned public interfaces may live under `include/<module>/interfaces` when they should be imported via the module path.
   * Private implementation headers belong under `src/<module>/src/<domain>/include`.
   * Domain source roots should contain only top-level API `.cpp` files; helpers belong in broad subdirectories such as `state`, `queue`, or `utils`.
+  * Non-trivial private helper classes should live in private headers/sources, not be declared inside API implementation `.cpp` files.
   * Concrete implementation files should mirror that layout under `src/<module>` when they represent module-owned concrete classes.
   * General shared types belong under `include/types`.
   * Header-only value/type files without a matching `.cpp` use lowercase filenames.
