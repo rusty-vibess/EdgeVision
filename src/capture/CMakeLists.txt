@@ -5,7 +5,9 @@ find_package(k4a CONFIG REQUIRED)
 add_library(capture)
 target_sources(capture PRIVATE
     src/camera/CameraCapture.cpp
+    src/config/K4aConfig.cpp
     src/frame/FrameIngestor.cpp
+    src/frame/FrameIngestorRunner.cpp
     src/frame/K4aFrameBuilder.cpp
     src/frame/resources/CaptureHandle.cpp
     src/frame/resources/ImageHandle.cpp
@@ -26,7 +28,7 @@ target_include_directories(capture PUBLIC
 target_include_directories(capture PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/frame/include
 )
-target_link_libraries(capture PUBLIC k4a::k4a model)
+target_link_libraries(capture PUBLIC config k4a::k4a model)
 
 if(ENABLE_TESTS)
     add_subdirectory(tests)

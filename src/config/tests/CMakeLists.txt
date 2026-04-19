@@ -1,0 +1,8 @@
+add_executable(config_command_line_tests
+    config/CommandLineParser.cpp
+)
+
+target_link_libraries(config_command_line_tests PRIVATE config)
+
+add_test(NAME config_command_line_unit_tests COMMAND config_command_line_tests)
+register_bundle_test(config_command_line_tests)
