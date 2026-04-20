@@ -15,7 +15,6 @@ namespace edgevision::capture::frame {
         [[nodiscard]] FrameBuildResult build(
             k4a_capture_t capture,
             const k4a_calibration_t& calibration,
-            const k4a_device_configuration_t& config,
             edgevision::model::frame::FrameId frameId,
             edgevision::model::frame::FrameTimestamp timestamp
         ) const;

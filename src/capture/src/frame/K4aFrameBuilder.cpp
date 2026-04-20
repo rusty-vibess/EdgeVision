@@ -19,7 +19,6 @@ namespace edgevision::capture::frame {
     FrameBuildResult K4aFrameBuilder::build(
         k4a_capture_t capture,
         const k4a_calibration_t& calibration,
-        const k4a_device_configuration_t& config,
         FrameId frameId,
         FrameTimestamp timestamp
     ) const {
@@ -56,18 +55,8 @@ namespace edgevision::capture::frame {
         }
 
         Frame frame = K4aFrameAssembler::assemble(
-            m_api,
-            colorImage.get(),
-            alignedDepth.image->get(),
-            intrinsics,
-            config,
-            frameId,
-            timestamp
+            m_api, colorImage.get(), alignedDepth.image->get(), intrinsics, frameId, timestamp
         );
-        if (const auto failure =
-                K4aFrameValidator::validateCameraConfig(frame.cameraConfig, frame, frameId)) {
-            return *failure;
-        }
 
         return makeFrameBuildSuccess(std::move(frame));
     }

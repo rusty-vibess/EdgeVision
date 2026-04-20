@@ -38,9 +38,8 @@ namespace edgevision::capture::frame {
 
         const FrameId frameId = m_nextFrameId++;
         const FrameTimestamp timestamp = nextTimestamp();
-        FrameBuildResult buildResult = m_builder.build(
-            captureHandle.get(), calibration, m_capture.config(), frameId, timestamp
-        );
+        FrameBuildResult buildResult =
+            m_builder.build(captureHandle.get(), calibration, frameId, timestamp);
         if (!buildResult.built()) {
             return makeBuildFailedResult(frameId, buildResult);
         }
