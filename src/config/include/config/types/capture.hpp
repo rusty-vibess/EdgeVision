@@ -41,8 +41,9 @@ namespace edgevision::config {
     };
 
     struct CaptureRuntimeConfig {
-        int captureTimeoutMs = 100;
-        int failureBackoffMs = 10;
+        int captureTimeoutMs = 1000;
+        // 60Hz but effectively unused due to long the capturetimeoutMS
+        int failureBackoffMs = (1000 / 60);
     };
 
     struct CaptureConfig {
