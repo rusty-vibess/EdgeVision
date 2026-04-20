@@ -6,7 +6,7 @@
 
 #include "model/frame/types/identity.hpp"
 #include "model/frame/types/packet.hpp"
-#include "readerwritercircularbuffer.h"
+#include <readerwritercircularbuffer.h>
 
 namespace edgevision::model::frame {
 
