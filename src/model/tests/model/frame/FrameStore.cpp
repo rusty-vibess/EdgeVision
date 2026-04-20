@@ -240,18 +240,22 @@ namespace {
         FrameStore store(FrameStoreConfig{4, 4});
         std::promise<void> consumerStarted{};
         std::future<void> started = consumerStarted.get_future();
+        std::atomic<bool> consumerReturned = false;
         std::optional<FramePacket> dequeuedPacket{};
 
-        std::thread consumer([&store, &consumerStarted, &dequeuedPacket]() {
+        std::thread consumer([&store, &consumerStarted, &consumerReturned, &dequeuedPacket]() {
             consumerStarted.set_value();
             dequeuedPacket = store.waitForNextFramePacket();
+            consumerReturned.store(true);
         });
 
         started.wait();
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        expectTrue(!consumerReturned.load(), "blocking dequeue should wait before submission");
         expectTrue(store.submitFrame(makeFrame(1, 100)).accepted(), "frame 1 should submit");
         consumer.join();
 
+        expectTrue(consumerReturned.load(), "blocking dequeue should return after submission");
         expectTrue(dequeuedPacket.has_value(), "blocking dequeue should return a packet");
         expectEq(
             dequeuedPacket->frameId, FrameId{1}, "blocking dequeue should observe submitted frame"

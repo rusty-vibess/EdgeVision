@@ -43,7 +43,12 @@ namespace edgevision::model::frame {
         validationContext.latestFrameId = m_history->latestFrameId();
         validationContext.latestTimestamp = m_history->latestTimestamp();
         validationContext.historyFull = m_history->size() >= m_config.maxStoredFrames;
-        validationContext.hasEvictableFrame = hasEvictableFrameLocked();
+        validationContext.hasEvictableFrame =
+            m_history
+                ->findOldestEvictable([this](FrameId frameId) {
+                    return !m_lifecycleTracker->isPendingForFpga(frameId);
+                })
+                .has_value();
         FrameSubmissionResult result = FrameValidator::validate(frame, validationContext);
         if (!result.accepted()) {
             recordRejectedFrameLocked(frame, result);
@@ -131,19 +136,13 @@ namespace edgevision::model::frame {
         return m_lifecycleTracker->get(frameId);
     }
 
-    bool FrameStore::hasEvictableFrameLocked() const {
-        return m_history
-            ->findOldestEvictable([this](FrameId frameId) {
-                return !m_lifecycleTracker->isPendingForFpga(frameId);
-            })
-            .has_value();
-    }
-
     void FrameStore::evictOldFramesLocked() {
         while (m_history->size() > m_config.maxStoredFrames) {
+            const std::optional<FrameId> latestFrameId = m_history->latestFrameId();
             const std::optional<FrameId> frameId =
-                m_history->findOldestEvictable([this](FrameId candidateFrameId) {
-                    return !m_lifecycleTracker->isPendingForFpga(candidateFrameId);
+                m_history->findOldestEvictable([this, latestFrameId](FrameId candidateFrameId) {
+                    return (!latestFrameId.has_value() || candidateFrameId != *latestFrameId)
+                        && !m_lifecycleTracker->isPendingForFpga(candidateFrameId);
                 });
 
             if (!frameId.has_value()) {
