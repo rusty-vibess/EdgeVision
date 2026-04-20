@@ -14,12 +14,9 @@ namespace edgevision::model::frame {
         TimestampNotNewer,
         MissingRgbBuffer,
         MissingDepthBuffer,
-        UnsupportedColorFormat,
-        UnsupportedDepthFormat,
         InvalidRgbDimensions,
         InvalidDepthDimensions,
         InvalidIntrinsics,
-        InvalidCameraConfig,
         PacketQueueFull,
         HistoryFull,
     };

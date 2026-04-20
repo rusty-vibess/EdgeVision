@@ -10,11 +10,8 @@ namespace edgevision::model::frame {
         FrameId frameId = 0;
         FrameTimestamp timestamp{};
         FrameImage rgb{};
-        FrameColorFormat colorFormat = FrameColorFormat::Unknown;
         FrameImage depth{};
-        FrameDepthFormat depthFormat = FrameDepthFormat::Unknown;
         CameraIntrinsics intrinsics{};
-        CameraConfig cameraConfig{};
     };
 
 } // namespace edgevision::model::frame
