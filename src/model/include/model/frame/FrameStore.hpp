@@ -45,7 +45,6 @@ namespace edgevision::model::frame {
         void evictOldFramesLocked();
         void recordRejectedFrameLocked(const Frame& frame, const FrameSubmissionResult& result);
         void recordStatusLocked(const FrameSubmissionResult& result);
-        [[nodiscard]] bool hasEvictableFrameLocked() const;
 
         FrameStoreConfig m_config{};
 
