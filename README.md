@@ -82,6 +82,76 @@ Copy into the project overlay:
 * From: `<VENV>/lib/python3.10/site-packages/torch`
 * To: `third_party/<SYSROOT_VERSION>-overlay/site-packages/torch`
 
+See [third_party/README.md](third_party/README.md) for overlay layout details.
+
+---
+
+### Building
+
+#### Build Deps
+
+```bash
+cmake -S cmake/third_party \
+  -B build-deps \
+  -G Ninja \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_INSTALL_PREFIX=/opt/jetson-sysroot-overlay/install \
+  -DCMAKE_TOOLCHAIN_FILE=/workspaces/repo/toolchains/jetson/jetson-aarch64.cmake \
+&& cmake --build build-deps --target install
+```
+
+#### Build Project Debug
+
+```bash
+cmake -S . \
+  -B build \
+  -G Ninja \
+  -DCMAKE_TOOLCHAIN_FILE=/workspaces/repo/toolchains/jetson/jetson-aarch64.cmake \
+  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+  && cmake --build build -j2
+```
+
+#### Build Project RelWithDebInfo
+
+```bash
+cmake -S . \
+  -B build-relwithdebinfo \
+  -G Ninja \
+  -DCMAKE_TOOLCHAIN_FILE=/workspaces/repo/toolchains/jetson/jetson-aarch64.cmake \
+  -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+  -DENABLE_TESTS=OFF \
+  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+&& cmake --build build-relwithdebinfo -j2
+```
+
+#### Bundle
+
+```bash
+cmake --build build --target bundle
+cmake --build build-relwithdebinfo --target bundle
+```
+
+#### Patches
+
+Some deps require source changes. Use patches to capture those diffs, place them in
+`patches/`, and ensure they are collected and applied by the build.
+
+Generate patches like this:
+
+```bash
+diff -u   .../<FILE>.orig   .../<FILE>   > /workspaces/repo/patches/<FILE>-<STUB>.patch
+```
+
+---
+
+### Tests
+
+Tests are built by default. If building for `Release` or you do not want tests ensure to pass `-DENABLE_TESTS=OFF` at configuration time.
+
+Tests if available will automatically be bundled by `cmake --build build --target bundle`.
+
+To run tests utilise `ctest --test-dir tests --output-on-failure` inside the target bundle directory.
+
 ---
 
 ### Toolchain Smoke Tests (NEEDS UPDATE)
@@ -110,53 +180,6 @@ cmake --build /workspaces/repo/toolchain-tests/build
 
 ---
 
-### Building
-
-#### Build Deps
-
-```bash
-cmake -S cmake/third_party \
-  -B build-deps \
-  -G Ninja \
-  -DCMAKE_BUILD_TYPE=Release \
-  -DCMAKE_INSTALL_PREFIX=/path/to/install \
-  -DCMAKE_TOOLCHAIN_FILE=/workspaces/repo/toolchains/jetson/jetson-aarch64.cmake \
-&& cmake --build build-deps --target install
-```
-
-#### Patches
-Some deps require source changes. Use patches to capture those diffs, place them in
-`patches/`, and ensure they are collected and applied by the build.
-
-Generate patches like this:
-```bash
-diff -u   .../<FILE>.orig   .../<FILE>   > /workspaces/repo/patches/<FILE>-<STUB>.patch
-```
-
----
-
-### Container Workflow
-Since this repo uses `.devcontainer`, it’s recommended to let the VS Code extension handle container lifecycle.
-
-Information for manual container management:
-
-```bash
-# Navigate to this project
-cd path/to/repo
-
-# Buildx is required to use the `platform:` field in docker-compose.yml
-docker buildx create --name docker-platform-builder --use
-docker buildx inspect --bootstrap
-
-docker compose build
-docker compose up
-```
-Shell access:
-
-```bash
-docker exec -it jetson-dev bash
-```
-
 ### Runtime Info
 
 `k4a` requires OpenGL.
@@ -169,6 +192,7 @@ On Jetson, X will not start unless a display is detected. In a headless build, y
 There is no runtime-only software workaround if the dependency requires GLX.
 
 Creating the required DISPLAY context from terminal:
+
 ```bash
 # JetPack boots gdm3 automatically when a display is detected — stop it
 sudo systemctl stop gdm3
@@ -185,7 +209,63 @@ export DISPLAY=:0
 # Confirm hardware OpenGL is active
 glxinfo | grep "OpenGL renderer"
 ```
+
 You should see the NVIDIA / Tegra renderer — not `llvmpipe`.
+
+---
+
+### Runtime Debugging And Performance
+
+Perf is available on the Jetson form metric dumping.
+
+For gdb:
+
+```bash
+sudo gdb --args ./bin/EdgeVision --enable-capture
+```
+
+```gdb
+set env LD_LIBRARY_PATH <EDGEVISION_BUNDLE>/bundle/lib
+# Then standard gdb style debugging from there
+# Useful functions to stop on
+edgevision::model::frame::FrameStore::submitFrame(edgevision::model::frame::Frame)
+# Useful tooling for dbg
+dump binary memory /output/file.bin hex hex + offset
+```
+
+Cache may saturate memory on jetson:
+
+```bash
+# When cache collects on Jetson
+sudo sync
+echo 3 | sudo tee /proc/sys/vm/drop_caches
+```
+
+---
+
+### Container Workflow
+
+Since this repo uses `.devcontainer`, it’s recommended to let the VS Code extension handle container lifecycle.
+
+Information for manual container management:
+
+```bash
+# Navigate to this project
+cd path/to/repo
+
+# Buildx is required to use the `platform:` field in docker-compose.yml
+docker buildx create --name docker-platform-builder --use
+docker buildx inspect --bootstrap
+
+docker compose build
+docker compose up
+```
+
+Shell access:
+
+```bash
+docker exec -it jetson-dev bash
+```
 
 ---
 
@@ -199,6 +279,8 @@ generated file.
 # From repo root
 ln -s .../build/compile_commands.json .
 ```
+
+Then restart clangd extension in vscode.
 
 ---
 
@@ -225,13 +307,23 @@ cmake -S cmake/third_party \
   -DCMAKE_TOOLCHAIN_FILE=/workspaces/repo/toolchains/jetson/jetson-aarch64.cmake \
 && cmake --build build-deps --target install
 
-# Configure + build project
+# Configure + build project Debug
 cmake -S . \
   -B build \
   -G Ninja \
   -DCMAKE_TOOLCHAIN_FILE=/workspaces/repo/toolchains/jetson/jetson-aarch64.cmake \
   -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
   && cmake --build build -j2
+
+# Configure + build RelWithDebInfo
+cmake -S . \
+  -B build-relwithdebinfo \
+  -G Ninja \
+  -DCMAKE_TOOLCHAIN_FILE=/workspaces/repo/toolchains/jetson/jetson-aarch64.cmake \
+  -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+  -DENABLE_TESTS=OFF \
+  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+&& cmake --build build-relwithdebinfo -j2 --target bundle
 
 # Individual build commands
 cmake --build /workspaces/repo/toolchain-tests/build
@@ -243,16 +335,8 @@ cmake --build build --target bundle
 scp -r build/bundle nano:dev/latest_edgevision_bundle
 # scp just latest bin to jetson (saves writes)
 scp -r build/bundle/bin/* nano:dev/latest_edgevision_bundle/bundle/bin
+# Run programme from bundle root
+sudo LD_LIBRARY_PATH="$PWD/lib:$LD_LIBRARY_PATH" ./bin/EdgeVision --enable-capture
+# Debug
+gdb --args ./bin/EdgeVision --enable-capture
 ```
-
-Then restart clangd extension in vscode.
-
----
-
-### Tests
-
-Tests are built by default. If building for `Release` or you do not want tests ensure to pass `-DENABLE_TESTS=ON` at configuration time.
-
-Tests if available will automatically be bundle but the bundler `cmake --build build --target bundle`.
-
-To run tests utilise `ctest --test-dir bundle/tests/tests/ --output-on-failure` inside the target device.
