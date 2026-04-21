@@ -22,7 +22,6 @@ namespace edgevision::capture::frame {
         TransformedDepthImageCreateFailed,
         DepthAlignmentFailed,
         InvalidIntrinsics,
-        InvalidCameraConfig,
     };
 
     struct FrameBuildResult {

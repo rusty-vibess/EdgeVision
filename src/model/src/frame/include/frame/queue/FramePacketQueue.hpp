@@ -1,12 +1,13 @@
 #pragma once
 
 #include <cstddef>
+#include <mutex>
 #include <optional>
+#include <readerwritercircularbuffer.h>
 #include <unordered_set>
 
 #include "model/frame/types/identity.hpp"
 #include "model/frame/types/packet.hpp"
-#include <readerwritercircularbuffer.h>
 
 namespace edgevision::model::frame {
 
@@ -18,18 +19,16 @@ namespace edgevision::model::frame {
         FramePacketQueue& operator=(const FramePacketQueue&) = delete;
 
         [[nodiscard]] bool tryEnqueue(const FramePacket& packet);
-        [[nodiscard]] std::optional<FramePacket> front();
-        [[nodiscard]] std::optional<FramePacket> latest() const;
+        [[nodiscard]] std::optional<FramePacket> tryDequeue();
+        [[nodiscard]] FramePacket waitDequeue();
         [[nodiscard]] bool markSent(FrameId frameId);
-        [[nodiscard]] bool empty() const;
         [[nodiscard]] std::size_t sizeApprox() const;
-        [[nodiscard]] std::size_t maxCapacity() const;
-        [[nodiscard]] bool hasPending(FrameId frameId) const;
 
       private:
         moodycamel::BlockingReaderWriterCircularBuffer<FramePacket> m_queue;
+        mutable std::mutex m_mutex{};
         std::unordered_set<FrameId> m_pendingFrameIds{};
-        std::optional<FramePacket> m_latestQueuedFramePacket{};
+        std::unordered_set<FrameId> m_inFlightFrameIds{};
     };
 
 } // namespace edgevision::model::frame

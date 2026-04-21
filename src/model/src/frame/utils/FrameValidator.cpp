@@ -2,7 +2,6 @@
 
 #include <cmath>
 #include <cstdint>
-#include <optional>
 #include <string>
 #include <utility>
 
@@ -27,38 +26,12 @@ namespace edgevision::model::frame {
             return timestamp.ticks > 0;
         }
 
-        [[nodiscard]] std::optional<int> bytesPerColorPixel(FrameColorFormat format) {
-            switch (format) {
-                case FrameColorFormat::Rgb8:
-                    return 3;
-                case FrameColorFormat::Bgra32:
-                    return 4;
-                case FrameColorFormat::Unknown:
-                    return std::nullopt;
-            }
-
-            return std::nullopt;
-        }
-
-        [[nodiscard]] std::optional<int> bytesPerDepthPixel(FrameDepthFormat format) {
-            switch (format) {
-                case FrameDepthFormat::Depth16Millimeters:
-                    return 2;
-                case FrameDepthFormat::Unknown:
-                    return std::nullopt;
-            }
-
-            return std::nullopt;
-        }
-
-        [[nodiscard]] bool hasSaneImageBytes(const FrameImage& image, int bytesPerPixel) {
+        [[nodiscard]] bool hasSaneImageBytes(const FrameImage& image) {
             if (!isValidSize(image.size) || image.strideBytes <= 0 || image.buffer.empty()) {
                 return false;
             }
 
-            const auto minStride = static_cast<std::int64_t>(image.size.width)
-                * static_cast<std::int64_t>(bytesPerPixel);
-            if (image.strideBytes < minStride) {
+            if (image.strideBytes < image.size.width) {
                 return false;
             }
 
@@ -74,13 +47,6 @@ namespace edgevision::model::frame {
                 && intrinsics.cy >= 0.0f;
         }
 
-        [[nodiscard]] bool isValidCameraConfig(const CameraConfig& config, const Frame& frame) {
-            return config.rgbResolution == frame.rgb.size
-                && config.depthResolution == frame.depth.size
-                && config.colorFormat == frame.colorFormat
-                && config.depthFormat == frame.depthFormat && config.depthScaleToMeters > 0.0f
-                && std::isfinite(config.depthScaleToMeters) && config.frameRateFps >= 0;
-        }
     } // namespace
 
     FrameSubmissionResult FrameValidator::validate(
@@ -118,24 +84,6 @@ namespace edgevision::model::frame {
             );
         }
 
-        const std::optional<int> colorBytesPerPixel = bytesPerColorPixel(frame.colorFormat);
-        if (!colorBytesPerPixel.has_value()) {
-            return makeResult(
-                FrameSubmissionCode::UnsupportedColorFormat,
-                frame.frameId,
-                "Frame color format is unsupported"
-            );
-        }
-
-        const std::optional<int> depthBytesPerPixel = bytesPerDepthPixel(frame.depthFormat);
-        if (!depthBytesPerPixel.has_value()) {
-            return makeResult(
-                FrameSubmissionCode::UnsupportedDepthFormat,
-                frame.frameId,
-                "Frame depth format is unsupported"
-            );
-        }
-
         if (frame.rgb.buffer.empty()) {
             return makeResult(
                 FrameSubmissionCode::MissingRgbBuffer, frame.frameId, "Frame RGB buffer is missing"
@@ -150,7 +98,7 @@ namespace edgevision::model::frame {
             );
         }
 
-        if (!hasSaneImageBytes(frame.rgb, *colorBytesPerPixel)) {
+        if (!hasSaneImageBytes(frame.rgb)) {
             return makeResult(
                 FrameSubmissionCode::InvalidRgbDimensions,
                 frame.frameId,
@@ -158,7 +106,7 @@ namespace edgevision::model::frame {
             );
         }
 
-        if (!hasSaneImageBytes(frame.depth, *depthBytesPerPixel)) {
+        if (!hasSaneImageBytes(frame.depth)) {
             return makeResult(
                 FrameSubmissionCode::InvalidDepthDimensions,
                 frame.frameId,
@@ -171,14 +119,6 @@ namespace edgevision::model::frame {
                 FrameSubmissionCode::InvalidIntrinsics,
                 frame.frameId,
                 "Frame camera intrinsics are invalid"
-            );
-        }
-
-        if (!isValidCameraConfig(frame.cameraConfig, frame)) {
-            return makeResult(
-                FrameSubmissionCode::InvalidCameraConfig,
-                frame.frameId,
-                "Frame camera configuration does not match the frame"
             );
         }
 

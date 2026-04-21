@@ -1,6 +1,7 @@
 #include "frame/queue/FramePacketQueue.hpp"
 
 #include <algorithm>
+#include <mutex>
 
 namespace edgevision::model::frame {
 
@@ -8,60 +9,49 @@ namespace edgevision::model::frame {
         : m_queue(std::max<std::size_t>(1, capacity)) {}
 
     bool FramePacketQueue::tryEnqueue(const FramePacket& packet) {
+        std::lock_guard lock(m_mutex);
         if (!m_queue.try_enqueue(packet)) {
             return false;
         }
 
         m_pendingFrameIds.insert(packet.frameId);
-        m_latestQueuedFramePacket = packet;
         return true;
     }
 
-    std::optional<FramePacket> FramePacketQueue::front() {
-        FramePacket* packet = m_queue.peek();
-        if (packet == nullptr) {
+    std::optional<FramePacket> FramePacketQueue::tryDequeue() {
+        FramePacket packet{};
+        if (!m_queue.try_dequeue(packet)) {
             return std::nullopt;
         }
 
-        return *packet;
+        std::lock_guard lock(m_mutex);
+        m_pendingFrameIds.erase(packet.frameId);
+        m_inFlightFrameIds.insert(packet.frameId);
+        return packet;
     }
 
-    std::optional<FramePacket> FramePacketQueue::latest() const {
-        return m_latestQueuedFramePacket;
+    FramePacket FramePacketQueue::waitDequeue() {
+        FramePacket packet{};
+        m_queue.wait_dequeue(packet);
+
+        std::lock_guard lock(m_mutex);
+        m_pendingFrameIds.erase(packet.frameId);
+        m_inFlightFrameIds.insert(packet.frameId);
+        return packet;
     }
 
     bool FramePacketQueue::markSent(FrameId frameId) {
-        FramePacket* packet = m_queue.peek();
-        if (packet == nullptr || packet->frameId != frameId) {
+        std::lock_guard lock(m_mutex);
+        if (!m_inFlightFrameIds.contains(frameId)) {
             return false;
         }
 
-        if (!m_queue.try_pop()) {
-            return false;
-        }
-
-        m_pendingFrameIds.erase(frameId);
-        if (m_pendingFrameIds.empty()) {
-            m_latestQueuedFramePacket = std::nullopt;
-        }
-
+        m_inFlightFrameIds.erase(frameId);
         return true;
-    }
-
-    bool FramePacketQueue::empty() const {
-        return m_pendingFrameIds.empty();
     }
 
     std::size_t FramePacketQueue::sizeApprox() const {
         return m_queue.size_approx();
-    }
-
-    std::size_t FramePacketQueue::maxCapacity() const {
-        return m_queue.max_capacity();
-    }
-
-    bool FramePacketQueue::hasPending(FrameId frameId) const {
-        return m_pendingFrameIds.contains(frameId);
     }
 
 } // namespace edgevision::model::frame

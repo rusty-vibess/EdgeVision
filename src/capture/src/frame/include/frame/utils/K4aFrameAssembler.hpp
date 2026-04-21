@@ -21,7 +21,6 @@ namespace edgevision::capture::frame {
             k4a_image_t colorImage,
             k4a_image_t depthImage,
             edgevision::model::frame::CameraIntrinsics intrinsics,
-            const k4a_device_configuration_t& config,
             edgevision::model::frame::FrameId frameId,
             edgevision::model::frame::FrameTimestamp timestamp
         );
@@ -35,11 +34,6 @@ namespace edgevision::capture::frame {
         [[nodiscard]] static edgevision::model::frame::FrameBuffer copyImageBuffer(
             const K4aInterface& api,
             k4a_image_t image
-        );
-
-        [[nodiscard]] static edgevision::model::frame::CameraConfig makeCameraConfig(
-            const edgevision::model::frame::Frame& frame,
-            const k4a_device_configuration_t& config
         );
     };
 
