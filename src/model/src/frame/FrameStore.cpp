@@ -38,18 +38,24 @@ namespace edgevision::model::frame {
     FrameSubmissionResult FrameStore::submitFrame(Frame frame) {
         std::unique_lock lock(m_mutex);
 
+        // Validate new Frame submission
         FrameValidationContext validationContext{};
         validationContext.latestFrameId = m_history->latestFrameId();
         validationContext.latestTimestamp = m_history->latestTimestamp();
         validationContext.historyFull = m_history->size() >= m_config.maxStoredFrames;
-        validationContext.hasEvictableFrame = hasEvictableFrameLocked();
-
+        validationContext.hasEvictableFrame =
+            m_history
+                ->findOldestEvictable([this](FrameId frameId) {
+                    return !m_lifecycleTracker->isPendingForFpga(frameId);
+                })
+                .has_value();
         FrameSubmissionResult result = FrameValidator::validate(frame, validationContext);
         if (!result.accepted()) {
             recordRejectedFrameLocked(frame, result);
             return result;
         }
 
+        // Enqueue valid Frame as FramePacket
         const FramePacket packet = frame;
         if (!m_packetQueue->tryEnqueue(packet)) {
             result = makeResult(
@@ -62,8 +68,6 @@ namespace edgevision::model::frame {
         }
 
         m_lifecycleTracker->recordAcceptedQueued(frame.frameId);
-        m_cameraIntrinsics = frame.intrinsics;
-        m_cameraConfig = frame.cameraConfig;
         m_history->add(std::move(frame));
         ++m_acceptedFrameCount;
 
@@ -72,7 +76,7 @@ namespace edgevision::model::frame {
         return result;
     }
 
-    std::optional<Frame> FrameStore::getLatestFrame() const {
+    std::optional<Frame> FrameStore::getLastFrame() const {
         std::shared_lock lock(m_mutex);
         return m_history->latest();
     }
@@ -87,24 +91,12 @@ namespace edgevision::model::frame {
         return m_history->recent(count);
     }
 
-    std::optional<CameraIntrinsics> FrameStore::getCameraIntrinsics() const {
-        std::shared_lock lock(m_mutex);
-        return m_cameraIntrinsics;
-    }
-
-    std::optional<CameraConfig> FrameStore::getCameraConfig() const {
-        std::shared_lock lock(m_mutex);
-        return m_cameraConfig;
-    }
-
     std::optional<FramePacket> FrameStore::getNextFramePacket() const {
-        std::unique_lock lock(m_mutex);
-        return m_packetQueue->front();
+        return m_packetQueue->tryDequeue();
     }
 
-    std::optional<FramePacket> FrameStore::peekLatestFramePacket() const {
-        std::shared_lock lock(m_mutex);
-        return m_packetQueue->latest();
+    FramePacket FrameStore::waitForNextFramePacket() const {
+        return m_packetQueue->waitDequeue();
     }
 
     bool FrameStore::markFramePacketSent(FrameId frameId) {
@@ -119,7 +111,7 @@ namespace edgevision::model::frame {
         return true;
     }
 
-    FrameStoreStatus FrameStore::getFrameStoreStatus() const {
+    FrameStoreStatus FrameStore::getStatus() const {
         std::shared_lock lock(m_mutex);
 
         FrameStoreStatus status{};
@@ -144,19 +136,13 @@ namespace edgevision::model::frame {
         return m_lifecycleTracker->get(frameId);
     }
 
-    bool FrameStore::hasEvictableFrameLocked() const {
-        return m_history
-            ->findOldestEvictable([this](FrameId frameId) {
-                return !m_lifecycleTracker->isPendingForFpga(frameId);
-            })
-            .has_value();
-    }
-
     void FrameStore::evictOldFramesLocked() {
         while (m_history->size() > m_config.maxStoredFrames) {
+            const std::optional<FrameId> latestFrameId = m_history->latestFrameId();
             const std::optional<FrameId> frameId =
-                m_history->findOldestEvictable([this](FrameId candidateFrameId) {
-                    return !m_lifecycleTracker->isPendingForFpga(candidateFrameId);
+                m_history->findOldestEvictable([this, latestFrameId](FrameId candidateFrameId) {
+                    return (!latestFrameId.has_value() || candidateFrameId != *latestFrameId)
+                        && !m_lifecycleTracker->isPendingForFpga(candidateFrameId);
                 });
 
             if (!frameId.has_value()) {

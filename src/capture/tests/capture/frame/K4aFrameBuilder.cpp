@@ -248,17 +248,6 @@ namespace {
         return calibration;
     }
 
-    [[nodiscard]] k4a_device_configuration_t makeConfig() {
-        k4a_device_configuration_t config = K4A_DEVICE_CONFIG_INIT_DISABLE_ALL;
-        config.color_format = K4A_IMAGE_FORMAT_COLOR_BGRA32;
-        config.color_resolution = K4A_COLOR_RESOLUTION_720P;
-        config.depth_mode = K4A_DEPTH_MODE_NFOV_UNBINNED;
-        config.camera_fps = K4A_FRAMES_PER_SECOND_30;
-        config.depth_delay_off_color_usec = 42;
-        config.synchronized_images_only = true;
-        return config;
-    }
-
     void testBuildsValidFrameWithCopiedBuffers() {
         FakeK4aApi api;
         K4aFrameBuilder builder(api);
@@ -266,24 +255,18 @@ namespace {
         FakeImage depth = makeDepthImage();
         FakeCapture capture{&color, &depth};
 
-        auto result = builder.build(handle(capture), makeCalibration(), makeConfig(), 7, {100});
+        auto result = builder.build(handle(capture), makeCalibration(), 7, {100});
 
         EXPECT_TRUE(result.built());
         EXPECT_EQ(result.code, FrameBuildCode::Built);
         EXPECT_EQ(result.frame->frameId, FrameId{7});
         EXPECT_EQ(result.frame->timestamp.ticks, 100);
-        EXPECT_EQ(result.frame->colorFormat, FrameColorFormat::Bgra32);
-        EXPECT_EQ(result.frame->depthFormat, FrameDepthFormat::Depth16Millimeters);
         const ImageSize expectedSize{2, 2};
         EXPECT_EQ(result.frame->rgb.size, expectedSize);
         EXPECT_EQ(result.frame->rgb.strideBytes, 8);
         EXPECT_EQ(result.frame->depth.size, expectedSize);
         EXPECT_EQ(result.frame->depth.strideBytes, 4);
         EXPECT_EQ(result.frame->intrinsics.fx, 525.0f);
-        EXPECT_EQ(result.frame->cameraConfig.depthScaleToMeters, 0.001f);
-        EXPECT_EQ(result.frame->cameraConfig.frameRateFps, 30);
-        EXPECT_EQ(result.frame->cameraConfig.depthDelayOffColorUsec, 42);
-        EXPECT_TRUE(result.frame->cameraConfig.synchronizedImagesOnly);
         EXPECT_EQ(api.transformationCreateCalls, 1);
         EXPECT_EQ(api.imageCreateCalls, 1);
         EXPECT_EQ(api.transformDepthCalls, 1);
@@ -302,7 +285,7 @@ namespace {
         FakeImage color = makeColorImage();
         FakeCapture capture{&color, nullptr};
 
-        auto result = builder.build(handle(capture), makeCalibration(), makeConfig(), 1, {100});
+        auto result = builder.build(handle(capture), makeCalibration(), 1, {100});
 
         EXPECT_FALSE(result.built());
         EXPECT_EQ(result.code, FrameBuildCode::MissingDepthImage);
@@ -317,14 +300,12 @@ namespace {
         FakeCapture capture{&color, &depth};
 
         color.format = K4A_IMAGE_FORMAT_COLOR_MJPG;
-        auto colorResult =
-            builder.build(handle(capture), makeCalibration(), makeConfig(), 1, {100});
+        auto colorResult = builder.build(handle(capture), makeCalibration(), 1, {100});
         EXPECT_EQ(colorResult.code, FrameBuildCode::UnsupportedColorFormat);
 
         color.format = K4A_IMAGE_FORMAT_COLOR_BGRA32;
         depth.format = K4A_IMAGE_FORMAT_CUSTOM;
-        auto depthResult =
-            builder.build(handle(capture), makeCalibration(), makeConfig(), 2, {200});
+        auto depthResult = builder.build(handle(capture), makeCalibration(), 2, {200});
         EXPECT_EQ(depthResult.code, FrameBuildCode::UnsupportedDepthFormat);
     }
 
@@ -336,7 +317,7 @@ namespace {
         FakeCapture capture{&color, &depth};
 
         color.strideBytes = 1;
-        auto result = builder.build(handle(capture), makeCalibration(), makeConfig(), 1, {100});
+        auto result = builder.build(handle(capture), makeCalibration(), 1, {100});
 
         EXPECT_FALSE(result.built());
         EXPECT_EQ(result.code, FrameBuildCode::InvalidColorImage);
@@ -351,7 +332,7 @@ namespace {
         k4a_calibration_t calibration = makeCalibration();
         calibration.color_camera_calibration.intrinsics.parameters.param.fx = 0.0f;
 
-        auto result = builder.build(handle(capture), calibration, makeConfig(), 1, {100});
+        auto result = builder.build(handle(capture), calibration, 1, {100});
 
         EXPECT_FALSE(result.built());
         EXPECT_EQ(result.code, FrameBuildCode::InvalidIntrinsics);
@@ -365,7 +346,7 @@ namespace {
         FakeImage depth = makeDepthImage();
         FakeCapture capture{&color, &depth};
 
-        auto result = builder.build(handle(capture), makeCalibration(), makeConfig(), 1, {100});
+        auto result = builder.build(handle(capture), makeCalibration(), 1, {100});
 
         EXPECT_FALSE(result.built());
         EXPECT_EQ(result.code, FrameBuildCode::TransformationCreateFailed);
@@ -379,7 +360,7 @@ namespace {
         FakeImage depth = makeDepthImage();
         FakeCapture capture{&color, &depth};
 
-        auto result = builder.build(handle(capture), makeCalibration(), makeConfig(), 1, {100});
+        auto result = builder.build(handle(capture), makeCalibration(), 1, {100});
 
         EXPECT_FALSE(result.built());
         EXPECT_EQ(result.code, FrameBuildCode::TransformedDepthImageCreateFailed);
@@ -394,7 +375,7 @@ namespace {
         FakeImage depth = makeDepthImage();
         FakeCapture capture{&color, &depth};
 
-        auto result = builder.build(handle(capture), makeCalibration(), makeConfig(), 1, {100});
+        auto result = builder.build(handle(capture), makeCalibration(), 1, {100});
 
         EXPECT_FALSE(result.built());
         EXPECT_EQ(result.code, FrameBuildCode::DepthAlignmentFailed);

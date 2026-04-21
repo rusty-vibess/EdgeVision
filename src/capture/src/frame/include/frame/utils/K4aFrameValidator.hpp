@@ -6,7 +6,6 @@
 #include "capture/frame/types/build_result.hpp"
 #include "capture/interfaces/K4aInterface.hpp"
 #include "model/frame/types/camera.hpp"
-#include "model/frame/types/frame.hpp"
 #include "model/frame/types/identity.hpp"
 
 namespace edgevision::capture::frame {
@@ -33,12 +32,6 @@ namespace edgevision::capture::frame {
 
         [[nodiscard]] static std::optional<FrameBuildResult> validateIntrinsics(
             const edgevision::model::frame::CameraIntrinsics& intrinsics,
-            edgevision::model::frame::FrameId frameId
-        );
-
-        [[nodiscard]] static std::optional<FrameBuildResult> validateCameraConfig(
-            const edgevision::model::frame::CameraConfig& config,
-            const edgevision::model::frame::Frame& frame,
             edgevision::model::frame::FrameId frameId
         );
     };

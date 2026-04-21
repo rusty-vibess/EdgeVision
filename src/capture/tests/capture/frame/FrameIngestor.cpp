@@ -290,19 +290,10 @@ namespace {
         frame.rgb.size = ImageSize{2, 2};
         frame.rgb.strideBytes = 8;
         frame.rgb.buffer = FrameBuffer(colorStorage->data(), colorStorage->size(), colorStorage);
-        frame.colorFormat = FrameColorFormat::Bgra32;
         frame.depth.size = ImageSize{2, 2};
         frame.depth.strideBytes = 4;
         frame.depth.buffer = FrameBuffer(depthStorage->data(), depthStorage->size(), depthStorage);
-        frame.depthFormat = FrameDepthFormat::Depth16Millimeters;
         frame.intrinsics = CameraIntrinsics{525.0f, 526.0f, 1.0f, 2.0f};
-        frame.cameraConfig.rgbResolution = frame.rgb.size;
-        frame.cameraConfig.depthResolution = frame.depth.size;
-        frame.cameraConfig.colorFormat = frame.colorFormat;
-        frame.cameraConfig.depthFormat = frame.depthFormat;
-        frame.cameraConfig.depthScaleToMeters = 0.001f;
-        frame.cameraConfig.frameRateFps = 30;
-        frame.cameraConfig.synchronizedImagesOnly = true;
         return frame;
     }
 
@@ -332,10 +323,9 @@ namespace {
         EXPECT_EQ(result.code, FrameIngestCode::Submitted);
         EXPECT_EQ(result.frameId, FrameId{1});
         EXPECT_EQ(fixture.rawCapture.releaseCalls, 1);
-        const std::optional<Frame> latest = fixture.store.getLatestFrame();
+        const auto latest = fixture.store.getLastFrame();
         EXPECT_TRUE(latest.has_value());
         EXPECT_EQ(latest->frameId, FrameId{1});
-        EXPECT_EQ(latest->colorFormat, FrameColorFormat::Bgra32);
     }
 
     void testCaptureFailureDoesNotSubmit() {
@@ -345,7 +335,7 @@ namespace {
         const auto result = fixture.ingestor.captureAndSubmit(10);
 
         EXPECT_EQ(result.code, FrameIngestCode::CaptureUnavailable);
-        EXPECT_FALSE(fixture.store.getLatestFrame().has_value());
+        EXPECT_FALSE(fixture.store.getLastFrame().has_value());
     }
 
     void testCalibrationFailureReleasesCaptureAndDoesNotSubmit() {
@@ -356,7 +346,7 @@ namespace {
 
         EXPECT_EQ(result.code, FrameIngestCode::CalibrationUnavailable);
         EXPECT_EQ(fixture.rawCapture.releaseCalls, 1);
-        EXPECT_FALSE(fixture.store.getLatestFrame().has_value());
+        EXPECT_FALSE(fixture.store.getLastFrame().has_value());
     }
 
     void testBuildFailureDoesNotSubmit() {
@@ -367,7 +357,7 @@ namespace {
 
         EXPECT_EQ(result.code, FrameIngestCode::BuildFailed);
         EXPECT_EQ(fixture.rawCapture.releaseCalls, 1);
-        EXPECT_FALSE(fixture.store.getLatestFrame().has_value());
+        EXPECT_FALSE(fixture.store.getLastFrame().has_value());
     }
 
     void testModelRejectionIsSurfaced() {
@@ -378,7 +368,7 @@ namespace {
 
         EXPECT_EQ(result.code, FrameIngestCode::ModelRejected);
         EXPECT_EQ(result.submissionCode.value(), FrameSubmissionCode::FrameIdNotNewer);
-        EXPECT_EQ(fixture.store.getLatestFrame()->frameId, FrameId{1});
+        EXPECT_EQ(fixture.store.getLastFrame()->frameId, FrameId{1});
     }
 
     void testGeneratedIdsAndTimestampsAreMonotonic() {
@@ -387,7 +377,7 @@ namespace {
         EXPECT_TRUE(fixture.ingestor.captureAndSubmit(10).submitted());
         EXPECT_TRUE(fixture.ingestor.captureAndSubmit(10).submitted());
 
-        const std::vector<Frame> frames = fixture.store.getRecentFrames(2);
+        const auto frames = fixture.store.getRecentFrames(2);
         EXPECT_EQ(frames.size(), std::size_t{2});
         EXPECT_EQ(frames[0].frameId, FrameId{1});
         EXPECT_EQ(frames[1].frameId, FrameId{2});

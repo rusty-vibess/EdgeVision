@@ -74,10 +74,6 @@ namespace edgevision::model::frame {
         const std::function<bool(FrameId)>& canEvict
     ) const {
         for (const Frame& frame : m_history) {
-            if (m_latestFrame.has_value() && frame.frameId == m_latestFrame->frameId) {
-                continue;
-            }
-
             if (canEvict(frame.frameId)) {
                 return frame.frameId;
             }

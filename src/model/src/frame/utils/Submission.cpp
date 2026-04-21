@@ -18,18 +18,12 @@ namespace edgevision::model::frame {
                 return "missing_rgb_buffer";
             case FrameSubmissionCode::MissingDepthBuffer:
                 return "missing_depth_buffer";
-            case FrameSubmissionCode::UnsupportedColorFormat:
-                return "unsupported_color_format";
-            case FrameSubmissionCode::UnsupportedDepthFormat:
-                return "unsupported_depth_format";
             case FrameSubmissionCode::InvalidRgbDimensions:
                 return "invalid_rgb_dimensions";
             case FrameSubmissionCode::InvalidDepthDimensions:
                 return "invalid_depth_dimensions";
             case FrameSubmissionCode::InvalidIntrinsics:
                 return "invalid_intrinsics";
-            case FrameSubmissionCode::InvalidCameraConfig:
-                return "invalid_camera_config";
             case FrameSubmissionCode::PacketQueueFull:
                 return "packet_queue_full";
             case FrameSubmissionCode::HistoryFull:

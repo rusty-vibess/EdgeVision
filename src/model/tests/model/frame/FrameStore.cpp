@@ -1,9 +1,12 @@
 #include "model/frame/FrameStore.hpp"
 
 #include <atomic>
+#include <chrono>
 #include <cstddef>
+#include <future>
 #include <iostream>
 #include <memory>
+#include <optional>
 #include <source_location>
 #include <string_view>
 #include <thread>
@@ -56,19 +59,10 @@ namespace {
         frame.rgb.size = ImageSize{2, 2};
         frame.rgb.strideBytes = 6;
         frame.rgb.buffer = makeBuffer(12);
-        frame.colorFormat = FrameColorFormat::Rgb8;
         frame.depth.size = ImageSize{2, 2};
         frame.depth.strideBytes = 4;
         frame.depth.buffer = makeBuffer(8);
-        frame.depthFormat = FrameDepthFormat::Depth16Millimeters;
         frame.intrinsics = CameraIntrinsics{525.0f, 525.0f, 1.0f, 1.0f};
-        frame.cameraConfig.rgbResolution = frame.rgb.size;
-        frame.cameraConfig.depthResolution = frame.depth.size;
-        frame.cameraConfig.colorFormat = frame.colorFormat;
-        frame.cameraConfig.depthFormat = frame.depthFormat;
-        frame.cameraConfig.depthScaleToMeters = 0.001f;
-        frame.cameraConfig.frameRateFps = 30;
-        frame.cameraConfig.synchronizedImagesOnly = true;
         return frame;
     }
 
@@ -79,32 +73,20 @@ namespace {
         const FrameSubmissionResult result = store.submitFrame(frame);
         expectTrue(result.accepted(), "submitFrame should accept a valid frame");
 
-        const std::optional<Frame> latestFrame = store.getLatestFrame();
+        const auto latestFrame = store.getLastFrame();
         expectTrue(latestFrame.has_value(), "accepted frame should become latest");
         expectEq(latestFrame->frameId, FrameId{1}, "latest frame id should match submission");
 
-        const std::optional<Frame> lookupFrame = store.getFrame(1);
+        const auto lookupFrame = store.getFrame(1);
         expectTrue(lookupFrame.has_value(), "accepted frame should be available by id");
 
-        const std::vector<Frame> recentFrames = store.getRecentFrames(5);
+        const auto recentFrames = store.getRecentFrames(5);
         expectEq(recentFrames.size(), std::size_t{1}, "recent frame history should include frame");
         expectEq(recentFrames[0].frameId, FrameId{1}, "recent frame id should match submission");
 
-        const std::optional<CameraIntrinsics> intrinsics = store.getCameraIntrinsics();
-        expectTrue(intrinsics.has_value(), "accepted frame should update intrinsics");
-        expectEq(intrinsics->fx, 525.0f, "intrinsics should preserve fx");
-
-        const std::optional<CameraConfig> config = store.getCameraConfig();
-        expectTrue(config.has_value(), "accepted frame should update camera config");
-        expectEq(config->depthScaleToMeters, 0.001f, "camera config should preserve depth scale");
-
-        const std::optional<FramePacket> nextPacket = store.getNextFramePacket();
+        const auto nextPacket = store.getNextFramePacket();
         expectTrue(nextPacket.has_value(), "accepted frame should queue a packet");
         expectEq(nextPacket->frameId, FrameId{1}, "queued packet id should match frame");
-
-        const std::optional<FramePacket> latestPacket = store.peekLatestFramePacket();
-        expectTrue(latestPacket.has_value(), "latest queued packet should be visible");
-        expectEq(latestPacket->frameId, FrameId{1}, "latest packet id should match frame");
 
         const std::optional<FrameLifecycle> lifecycle = store.getFrameLifecycle(1);
         expectTrue(lifecycle.has_value(), "accepted frame should have lifecycle state");
@@ -116,10 +98,10 @@ namespace {
             "accepted lifecycle state should be queued_for_fpga"
         );
 
-        const FrameStoreStatus status = store.getFrameStoreStatus();
+        const FrameStoreStatus status = store.getStatus();
         expectEq(status.acceptedFrameCount, std::size_t{1}, "status should count acceptance");
         expectEq(status.rejectedFrameCount, std::size_t{0}, "status should not count rejection");
-        expectEq(status.queuedPacketCount, std::size_t{1}, "status should count queued packet");
+        expectEq(status.queuedPacketCount, std::size_t{0}, "dequeue should consume queued packet");
         expectTrue(status.latestFrameId.has_value(), "status should expose latest frame id");
         expectEq(*status.latestFrameId, FrameId{1}, "status latest frame id should match");
     }
@@ -140,16 +122,16 @@ namespace {
             "missing depth should be rejected"
         );
 
-        const std::optional<Frame> latestFrame = store.getLatestFrame();
+        const auto latestFrame = store.getLastFrame();
         expectTrue(latestFrame.has_value(), "latest frame should remain available");
         expectEq(latestFrame->frameId, FrameId{1}, "invalid frame should not replace latest");
         expectTrue(!store.getFrame(2).has_value(), "invalid frame should not enter lookup");
 
-        const std::optional<FramePacket> nextPacket = store.getNextFramePacket();
+        const auto nextPacket = store.getNextFramePacket();
         expectTrue(nextPacket.has_value(), "existing packet should remain queued");
         expectEq(nextPacket->frameId, FrameId{1}, "invalid frame should not queue a packet");
 
-        const FrameStoreStatus status = store.getFrameStoreStatus();
+        const FrameStoreStatus status = store.getStatus();
         expectEq(status.acceptedFrameCount, std::size_t{1}, "accepted count should remain one");
         expectEq(status.rejectedFrameCount, std::size_t{1}, "rejected count should update");
         expectEq(
@@ -180,17 +162,8 @@ namespace {
         );
     }
 
-    void testFormatAndDimensionValidation() {
+    void testDimensionAndIntrinsicsValidation() {
         FrameStore store(FrameStoreConfig{3, 3});
-
-        Frame unsupportedColorFrame = makeFrame(1, 100);
-        unsupportedColorFrame.colorFormat = FrameColorFormat::Unknown;
-        unsupportedColorFrame.cameraConfig.colorFormat = FrameColorFormat::Unknown;
-        expectEq(
-            store.submitFrame(unsupportedColorFrame).code,
-            FrameSubmissionCode::UnsupportedColorFormat,
-            "unsupported color format should be rejected"
-        );
 
         Frame invalidStrideFrame = makeFrame(2, 200);
         invalidStrideFrame.rgb.strideBytes = 1;
@@ -207,14 +180,6 @@ namespace {
             FrameSubmissionCode::InvalidIntrinsics,
             "invalid intrinsics should be rejected"
         );
-
-        Frame invalidConfigFrame = makeFrame(4, 400);
-        invalidConfigFrame.cameraConfig.depthScaleToMeters = 0.0f;
-        expectEq(
-            store.submitFrame(invalidConfigFrame).code,
-            FrameSubmissionCode::InvalidCameraConfig,
-            "invalid camera config should be rejected"
-        );
     }
 
     void testPacketHandoffLifecycle() {
@@ -222,12 +187,12 @@ namespace {
         expectTrue(store.submitFrame(makeFrame(1, 100)).accepted(), "frame 1 should submit");
         expectTrue(store.submitFrame(makeFrame(2, 200)).accepted(), "frame 2 should submit");
 
-        const std::optional<FramePacket> firstPacket = store.getNextFramePacket();
+        const auto firstPacket = store.getNextFramePacket();
         expectTrue(firstPacket.has_value(), "first packet should be available");
         expectEq(firstPacket->frameId, FrameId{1}, "packet queue should be oldest-first");
 
-        expectTrue(!store.markFramePacketSent(2), "cannot mark a non-front packet sent");
-        expectTrue(store.markFramePacketSent(1), "front packet should mark sent");
+        expectTrue(!store.markFramePacketSent(2), "cannot mark a non-dequeued packet sent");
+        expectTrue(store.markFramePacketSent(1), "first dequeued packet should mark sent");
 
         const std::optional<FrameLifecycle> sentLifecycle = store.getFrameLifecycle(1);
         expectTrue(sentLifecycle.has_value(), "sent frame lifecycle should be tracked");
@@ -238,23 +203,85 @@ namespace {
             "lifecycle state should be sent_to_fpga"
         );
 
-        const std::optional<FramePacket> secondPacket = store.getNextFramePacket();
+        const auto secondPacket = store.getNextFramePacket();
         expectTrue(secondPacket.has_value(), "second packet should remain queued");
         expectEq(secondPacket->frameId, FrameId{2}, "second packet should become queue front");
 
         expectTrue(store.markFramePacketSent(2), "second packet should mark sent");
         expectTrue(!store.getNextFramePacket().has_value(), "packet queue should become empty");
-        expectTrue(
-            !store.peekLatestFramePacket().has_value(),
-            "latest queued packet should clear when queue is empty"
+    }
+
+    void testPacketDequeueConsumes() {
+        FrameStore store(FrameStoreConfig{4, 4});
+        expectTrue(store.submitFrame(makeFrame(1, 100)).accepted(), "frame 1 should submit");
+        expectTrue(store.submitFrame(makeFrame(2, 200)).accepted(), "frame 2 should submit");
+
+        const auto firstPacket = store.getNextFramePacket();
+        const auto secondPacket = store.getNextFramePacket();
+
+        expectTrue(firstPacket.has_value(), "first packet dequeue should succeed");
+        expectTrue(secondPacket.has_value(), "second packet dequeue should succeed");
+        expectEq(firstPacket->frameId, FrameId{1}, "first dequeue should consume queue front");
+        expectEq(
+            secondPacket->frameId, FrameId{2}, "second dequeue should consume next queued packet"
         );
+        expectEq(
+            store.getStatus().queuedPacketCount,
+            std::size_t{0},
+            "dequeue should consume queued packets"
+        );
+
+        expectTrue(store.markFramePacketSent(1), "first dequeued packet should mark sent");
+        expectTrue(store.markFramePacketSent(2), "second dequeued packet should mark sent");
+        expectTrue(!store.getNextFramePacket().has_value(), "packet queue should be empty");
+    }
+
+    void testBlockingPacketDequeueWaitsForSubmission() {
+        FrameStore store(FrameStoreConfig{4, 4});
+        std::promise<void> consumerStarted{};
+        std::future<void> started = consumerStarted.get_future();
+        std::atomic<bool> consumerReturned = false;
+        std::optional<FramePacket> dequeuedPacket{};
+
+        std::thread consumer([&store, &consumerStarted, &consumerReturned, &dequeuedPacket]() {
+            consumerStarted.set_value();
+            dequeuedPacket = store.waitForNextFramePacket();
+            consumerReturned.store(true);
+        });
+
+        started.wait();
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        expectTrue(!consumerReturned.load(), "blocking dequeue should wait before submission");
+        expectTrue(store.submitFrame(makeFrame(1, 100)).accepted(), "frame 1 should submit");
+        consumer.join();
+
+        expectTrue(consumerReturned.load(), "blocking dequeue should return after submission");
+        expectTrue(dequeuedPacket.has_value(), "blocking dequeue should return a packet");
+        expectEq(
+            dequeuedPacket->frameId, FrameId{1}, "blocking dequeue should observe submitted frame"
+        );
+        expectEq(
+            store.getStatus().queuedPacketCount,
+            std::size_t{0},
+            "blocking dequeue should consume packet"
+        );
+
+        const std::optional<FrameLifecycle> lifecycle = store.getFrameLifecycle(1);
+        expectTrue(lifecycle.has_value(), "dequeued packet lifecycle should be tracked");
+        expectTrue(
+            lifecycle->queuedForFpga && !lifecycle->sentToFpga,
+            "blocking dequeue should not mark frame sent"
+        );
+        expectTrue(store.markFramePacketSent(1), "dequeued packet should mark sent");
     }
 
     void testBoundedHistoryEvictsSentFrames() {
         FrameStore store(FrameStoreConfig{2, 4});
         expectTrue(store.submitFrame(makeFrame(1, 100)).accepted(), "frame 1 should submit");
+        expectTrue(store.getNextFramePacket().has_value(), "frame 1 packet should dequeue");
         expectTrue(store.markFramePacketSent(1), "frame 1 should mark sent");
         expectTrue(store.submitFrame(makeFrame(2, 200)).accepted(), "frame 2 should submit");
+        expectTrue(store.getNextFramePacket().has_value(), "frame 2 packet should dequeue");
         expectTrue(store.markFramePacketSent(2), "frame 2 should mark sent");
         expectTrue(store.submitFrame(makeFrame(3, 300)).accepted(), "frame 3 should submit");
 
@@ -262,7 +289,7 @@ namespace {
         expectTrue(store.getFrame(2).has_value(), "recent sent frame should remain");
         expectTrue(store.getFrame(3).has_value(), "latest frame should remain");
 
-        const std::vector<Frame> recentFrames = store.getRecentFrames(5);
+        const auto recentFrames = store.getRecentFrames(5);
         expectEq(recentFrames.size(), std::size_t{2}, "history should stay bounded");
         expectEq(recentFrames[0].frameId, FrameId{2}, "recent history should preserve order");
         expectEq(recentFrames[1].frameId, FrameId{3}, "latest should be last in recent history");
@@ -271,8 +298,30 @@ namespace {
         expectTrue(evictedLifecycle.has_value(), "evicted frame lifecycle should remain visible");
         expectTrue(evictedLifecycle->dropped, "evicted frame should be marked dropped");
 
-        const FrameStoreStatus status = store.getFrameStoreStatus();
+        const FrameStoreStatus status = store.getStatus();
         expectEq(status.evictedFrameCount, std::size_t{1}, "status should count evictions");
+    }
+
+    void testReturnedFrameSurvivesStoreEviction() {
+        FrameStore store(FrameStoreConfig{1, 4});
+        expectTrue(store.submitFrame(makeFrame(1, 100)).accepted(), "frame 1 should submit");
+
+        const auto returnedFrame = store.getLastFrame();
+        expectTrue(returnedFrame.has_value(), "frame 1 should be readable");
+        expectTrue(store.getNextFramePacket().has_value(), "frame 1 packet should dequeue");
+        expectTrue(store.markFramePacketSent(1), "frame 1 should mark sent");
+        expectTrue(store.submitFrame(makeFrame(2, 200)).accepted(), "frame 2 should submit");
+
+        expectTrue(!store.getFrame(1).has_value(), "frame 1 should be evicted from store");
+        expectEq(returnedFrame->frameId, FrameId{1}, "returned frame should retain original id");
+        expectTrue(
+            !returnedFrame->rgb.buffer.empty(), "returned frame should retain RGB buffer lifetime"
+        );
+        expectEq(
+            returnedFrame->rgb.buffer.byteCount,
+            std::size_t{12},
+            "returned frame should retain RGB buffer size"
+        );
     }
 
     void testHistoryFullProtectsPendingFrames() {
@@ -289,7 +338,7 @@ namespace {
             !store.getFrame(2).has_value(), "history-full rejection should not store frame"
         );
         expectEq(
-            store.getFrameStoreStatus().queuedPacketCount,
+            store.getStatus().queuedPacketCount,
             std::size_t{1},
             "history-full rejection should not queue packet"
         );
@@ -307,7 +356,7 @@ namespace {
         );
         expectTrue(!store.getFrame(2).has_value(), "queue-full rejection should not store frame");
 
-        const std::optional<Frame> latestFrame = store.getLatestFrame();
+        const auto latestFrame = store.getLastFrame();
         expectTrue(latestFrame.has_value(), "latest frame should remain available");
         expectEq(
             latestFrame->frameId, FrameId{1}, "queue-full rejection should not replace latest"
@@ -320,9 +369,9 @@ namespace {
 
         std::thread reader([&store, &done]() {
             while (!done.load()) {
-                (void)store.getLatestFrame();
+                (void)store.getLastFrame();
                 (void)store.getRecentFrames(3);
-                (void)store.getFrameStoreStatus();
+                (void)store.getStatus();
             }
         });
 
@@ -337,7 +386,7 @@ namespace {
         done.store(true);
         reader.join();
 
-        const std::optional<Frame> latestFrame = store.getLatestFrame();
+        const auto latestFrame = store.getLastFrame();
         expectTrue(latestFrame.has_value(), "latest frame should exist after concurrent smoke");
         expectEq(latestFrame->frameId, FrameId{5}, "latest frame should be final submitted frame");
     }
@@ -347,9 +396,12 @@ int main() {
     testAcceptedSubmissionPublishesState();
     testInvalidFrameDoesNotPoisonStore();
     testOrderingValidation();
-    testFormatAndDimensionValidation();
+    testDimensionAndIntrinsicsValidation();
     testPacketHandoffLifecycle();
+    testPacketDequeueConsumes();
+    testBlockingPacketDequeueWaitsForSubmission();
     testBoundedHistoryEvictsSentFrames();
+    testReturnedFrameSurvivesStoreEviction();
     testHistoryFullProtectsPendingFrames();
     testPacketQueueFullRejectsWithoutStateMutation();
     testConcurrentReadSmoke();

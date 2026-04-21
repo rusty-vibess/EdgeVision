@@ -19,17 +19,6 @@ namespace edgevision::model::frame {
         return !(lhs == rhs);
     }
 
-    enum class FrameColorFormat {
-        Unknown,
-        Rgb8,
-        Bgra32,
-    };
-
-    enum class FrameDepthFormat {
-        Unknown,
-        Depth16Millimeters,
-    };
-
     struct FrameBuffer {
         const std::byte* data = nullptr;
         std::size_t byteCount = 0;

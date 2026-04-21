@@ -11,9 +11,7 @@ namespace edgevision::capture::frame {
     namespace {
         constexpr int kMaxSaneImageDimension = 16384;
 
-        using edgevision::model::frame::CameraConfig;
         using edgevision::model::frame::CameraIntrinsics;
-        using edgevision::model::frame::Frame;
         using edgevision::model::frame::FrameId;
         using edgevision::model::frame::FrameTimestamp;
         using edgevision::model::frame::ImageSize;
@@ -59,13 +57,6 @@ namespace edgevision::capture::frame {
                 && intrinsics.cy >= 0.0f;
         }
 
-        [[nodiscard]] bool isValidCameraConfig(const CameraConfig& config, const Frame& frame) {
-            return config.rgbResolution == frame.rgb.size
-                && config.depthResolution == frame.depth.size
-                && config.colorFormat == frame.colorFormat
-                && config.depthFormat == frame.depthFormat && config.depthScaleToMeters > 0.0f
-                && std::isfinite(config.depthScaleToMeters) && config.frameRateFps >= 0;
-        }
     } // namespace
 
     std::optional<FrameBuildResult> K4aFrameValidator::validateRequest(
@@ -163,22 +154,6 @@ namespace edgevision::capture::frame {
                 FrameBuildCode::InvalidIntrinsics,
                 frameId,
                 "K4A color camera intrinsics are invalid"
-            );
-        }
-
-        return std::nullopt;
-    }
-
-    std::optional<FrameBuildResult> K4aFrameValidator::validateCameraConfig(
-        const CameraConfig& config,
-        const Frame& frame,
-        FrameId frameId
-    ) {
-        if (!isValidCameraConfig(config, frame)) {
-            return makeFrameBuildFailure(
-                FrameBuildCode::InvalidCameraConfig,
-                frameId,
-                "Built camera configuration does not match the frame"
             );
         }
 
