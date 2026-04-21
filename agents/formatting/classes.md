@@ -5,5 +5,5 @@
 3. Please utilise type hints where necessary such as `[[nodiscard]]`.
 4. Class members should be prepended with `m_someVar`, this indicates a class member.
 5. We prefer references over pointers for function arguments, as they're safer and avoid unnecessary `nullptr` checks.
-6. Abstract interfaces should use the repo interface layout conventions in `include/interfaces` and `src/interfaces`.
+6. Abstract interfaces should use the repo interface layout conventions in either `include/interfaces` or module-prefixed `include/<module>/interfaces`.
 7. Concrete public class headers should live under their module include path, for example `include/reconstruction`.

@@ -68,11 +68,15 @@ list(APPEND CMAKE_PREFIX_PATH "/opt/jetson-sysroot-overlay/install")
 # Torch being lower in the superbuild caused strange issues hence find_package here
 find_package(Torch CONFIG REQUIRED)
 
+add_subdirectory(src/config)
+add_subdirectory(src/model)
 add_subdirectory(src/capture)
 add_subdirectory(src/reconstruction)
 add_subdirectory(src/streaming)
 
+target_link_libraries(EdgeVision PRIVATE config)
 target_link_libraries(EdgeVision PRIVATE capture)
+target_link_libraries(EdgeVision PRIVATE model)
 target_link_libraries(EdgeVision PRIVATE reconstruction)
 target_link_libraries(EdgeVision PRIVATE streaming)
 
