@@ -5,6 +5,7 @@
 build
 build-local
 build-deps
+build-relwithdebinfo
 .cache
 compile_commands.json
 
