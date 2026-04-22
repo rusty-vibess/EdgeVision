@@ -6,6 +6,7 @@ build
 build-local
 build-deps
 build-xdma
+build-relwithdebinfo
 .cache
 compile_commands.json
 
