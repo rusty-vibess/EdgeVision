@@ -24,6 +24,7 @@ include(extern/k4a.cmake)
 include(extern/json.cmake)
 include(extern/torch.cmake)
 include(extern/readerwriterqueue.cmake)
+include(extern/infinitam.cmake)
 
 
 # ---- Apply third_party patches ----
