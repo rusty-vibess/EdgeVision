@@ -24,6 +24,20 @@ namespace edgevision::config {
             return true;
         }
 
+        [[nodiscard]] bool parseReadPolicy(std::string_view value, ReadPolicy& readPolicy) {
+            if (value == "greedy") {
+                readPolicy = ReadPolicy::Greedy;
+                return true;
+            }
+
+            if (value == "balanced") {
+                readPolicy = ReadPolicy::Balanced;
+                return true;
+            }
+
+            return false;
+        }
+
     } // namespace
 
     bool CommandLineParseResult::parsed() const {
@@ -55,6 +69,23 @@ namespace edgevision::config {
                 }
 
                 result.config.render.port = port;
+                ++i;
+                continue;
+            }
+
+            if (arg == "--read-policy") {
+                if (i + 1 >= argc) {
+                    result.error = "Missing value for --read-policy";
+                    return result;
+                }
+
+                ReadPolicy readPolicy = result.config.render.readPolicy;
+                if (!parseReadPolicy(argv[i + 1], readPolicy)) {
+                    result.error = "Invalid read policy: " + std::string(argv[i + 1]);
+                    return result;
+                }
+
+                result.config.render.readPolicy = readPolicy;
                 ++i;
                 continue;
             }

@@ -1,8 +1,6 @@
 #include "scene/state/SceneAccessLease.hpp"
 
 #include <memory>
-#include <mutex>
-#include <shared_mutex>
 #include <stdexcept>
 #include <utility>
 
@@ -10,28 +8,80 @@
 #include "scene/state/SharedSceneState.hpp"
 
 namespace edgevision::model::scene {
+    namespace {
+        [[nodiscard]] bool canAcquireRead(const SharedSceneState& state) {
+            switch (state.readPolicy) {
+                case SceneReadPolicy::Greedy:
+                    return !state.writerActive;
+                case SceneReadPolicy::Balanced:
+                    return !state.writerActive
+                        && (state.waitingWriterCount == 0 || state.blockedPriorityReadPending);
+            }
+
+            return false;
+        }
+
+        [[nodiscard]] bool canAcquireWrite(const SharedSceneState& state) {
+            return !state.writerActive && state.activeReaderCount == 0
+                && !state.blockedPriorityReadPending;
+        }
+    } // namespace
+
+    SceneAccessLease::~SceneAccessLease() {
+        if (!m_state) {
+            return;
+        }
+
+        {
+            std::lock_guard lock(m_state->mutex);
+            if (m_mode == SceneLockMode::Read) {
+                if (m_state->activeReaderCount > 0) {
+                    --m_state->activeReaderCount;
+                }
+            } else {
+                m_state->writerActive = false;
+            }
+        }
+
+        m_state->condition.notify_all();
+    }
 
     std::shared_ptr<SceneAccessLease> SceneAccessLease::acquireRead(
         std::shared_ptr<SharedSceneState> state
     ) {
-        std::shared_lock lock(state->mutex);
+        std::unique_lock lock(state->mutex);
+        if (state->writerActive) {
+            state->blockedPriorityReadPending = true;
+        }
+
+        state->condition.wait(lock, [&state]() { return canAcquireRead(*state); });
+        ++state->activeReaderCount;
         const SceneVersionId version = state->sceneVersionId;
+        state->blockedPriorityReadPending = false;
+        // Unlock ASAP, before scope exit
+        lock.unlock();
+
         return std::shared_ptr<SceneAccessLease>(
-            new SceneAccessLease(std::move(state), std::move(lock), version)
+            new SceneAccessLease(std::move(state), SceneLockMode::Read, version)
         );
     }
 
     std::shared_ptr<SceneAccessLease> SceneAccessLease::tryAcquireRead(
         std::shared_ptr<SharedSceneState> state
     ) {
-        std::shared_lock lock(state->mutex, std::try_to_lock);
-        if (!lock.owns_lock()) {
+        std::unique_lock lock(state->mutex);
+        if (!canAcquireRead(*state)) {
             return {};
         }
 
+        ++state->activeReaderCount;
         const SceneVersionId version = state->sceneVersionId;
+        state->blockedPriorityReadPending = false;
+        // Unlock ASAP, before scope exit
+        lock.unlock();
+
         return std::shared_ptr<SceneAccessLease>(
-            new SceneAccessLease(std::move(state), std::move(lock), version)
+            new SceneAccessLease(std::move(state), SceneLockMode::Read, version)
         );
     }
 
@@ -39,23 +89,35 @@ namespace edgevision::model::scene {
         std::shared_ptr<SharedSceneState> state
     ) {
         std::unique_lock lock(state->mutex);
+        ++state->waitingWriterCount;
+        state->condition.wait(lock, [&state]() { return canAcquireWrite(*state); });
+        --state->waitingWriterCount;
+        state->writerActive = true;
         const SceneVersionId version = state->sceneVersionId;
+        // Unlock ASAP, before scope exit
+        lock.unlock();
+
         return std::shared_ptr<SceneAccessLease>(
-            new SceneAccessLease(std::move(state), std::move(lock), version)
+            new SceneAccessLease(std::move(state), SceneLockMode::Write, version)
         );
     }
 
     std::shared_ptr<SceneAccessLease> SceneAccessLease::tryAcquireWrite(
         std::shared_ptr<SharedSceneState> state
     ) {
-        std::unique_lock lock(state->mutex, std::try_to_lock);
-        if (!lock.owns_lock()) {
+        // Try will not wait for scene access, but may briefly wait for the state mutex.
+        std::unique_lock lock(state->mutex);
+        if (!canAcquireWrite(*state)) {
             return {};
         }
 
+        state->writerActive = true;
         const SceneVersionId version = state->sceneVersionId;
+        // Unlock ASAP, before scope exit
+        lock.unlock();
+
         return std::shared_ptr<SceneAccessLease>(
-            new SceneAccessLease(std::move(state), std::move(lock), version)
+            new SceneAccessLease(std::move(state), SceneLockMode::Write, version)
         );
     }
 
@@ -81,23 +143,10 @@ namespace edgevision::model::scene {
 
     SceneAccessLease::SceneAccessLease(
         std::shared_ptr<SharedSceneState> state,
-        std::shared_lock<std::shared_mutex> lock,
+        SceneLockMode mode,
         SceneVersionId version
     )
-        : m_state(std::move(state)),
-          m_mode(SceneLockMode::Read),
-          m_version(version),
-          m_readLock(std::move(lock)) {}
-
-    SceneAccessLease::SceneAccessLease(
-        std::shared_ptr<SharedSceneState> state,
-        std::unique_lock<std::shared_mutex> lock,
-        SceneVersionId version
-    )
-        : m_state(std::move(state)),
-          m_mode(SceneLockMode::Write),
-          m_version(version),
-          m_writeLock(std::move(lock)) {}
+        : m_state(std::move(state)), m_mode(mode), m_version(version) {}
 
     SceneAccessLease& SceneAccessInternals::lease(const SceneReadAccess& access) {
         if (!access.m_lease) {

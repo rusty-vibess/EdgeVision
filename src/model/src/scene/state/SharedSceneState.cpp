@@ -4,7 +4,7 @@
 
 namespace edgevision::model::scene {
 
-    SharedSceneState::SharedSceneState() {
+    SharedSceneState::SharedSceneState(SceneReadPolicy readPolicy) : readPolicy(readPolicy) {
         scene = std::make_unique<InfiniTamScene>(
             &settings.sceneParams,
             settings.swappingMode == ITMLib::ITMLibSettings::SWAPPINGMODE_ENABLED,

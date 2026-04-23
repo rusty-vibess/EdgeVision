@@ -6,6 +6,11 @@ namespace edgevision::model::scene {
 
     using SceneVersionId = std::uint64_t;
 
+    enum class SceneReadPolicy {
+        Greedy,
+        Balanced,
+    };
+
     struct VoxelCoordinate {
         int x = 0;
         int y = 0;
@@ -32,10 +37,12 @@ namespace edgevision::model::scene {
         bool isWholeScene = true;
     };
 
+    /// Returns a region spanning the entire scene.
     [[nodiscard]] constexpr VoxelRegion wholeSceneRegion() {
         return VoxelRegion{};
     }
 
+    /// Returns a bounded voxel region rooted at `origin` with size `extent`.
     [[nodiscard]] constexpr VoxelRegion boundedVoxelRegion(
         VoxelCoordinate origin,
         VoxelCoordinate extent

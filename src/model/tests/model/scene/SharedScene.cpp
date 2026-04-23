@@ -95,6 +95,95 @@ namespace {
         );
     }
 
+    void expectBlockedReadGetsPriorityAheadOfWaitingWriter(SceneReadPolicy readPolicy) {
+        SharedScene scene{readPolicy};
+        std::promise<void> readerStarted{};
+        std::promise<void> writerStarted{};
+        std::promise<void> releaseReader{};
+        std::future<void> readerStartedFuture = readerStarted.get_future();
+        std::future<void> writerStartedFuture = writerStarted.get_future();
+        std::shared_future<void> releaseReaderSignal = releaseReader.get_future().share();
+        std::atomic<bool> readerAcquired = false;
+        std::atomic<bool> writerAcquired = false;
+        std::thread reader{};
+        std::thread writer{};
+
+        {
+            auto initialWrite = scene.write();
+            reader =
+                std::thread([&scene, &readerStarted, &releaseReaderSignal, &readerAcquired]() {
+                    readerStarted.set_value();
+                    auto readAccess = scene.read();
+                    readerAcquired.store(true);
+                    releaseReaderSignal.wait();
+                });
+            writer = std::thread([&scene, &writerStarted, &writerAcquired]() {
+                writerStarted.set_value();
+                auto writeAccess = scene.write();
+                writerAcquired.store(true);
+            });
+
+            readerStartedFuture.wait();
+            writerStartedFuture.wait();
+
+            expectTrue(
+                !waitUntil([&readerAcquired]() { return readerAcquired.load(); }, 20ms),
+                "blocked read should wait for active write"
+            );
+            expectTrue(
+                !waitUntil([&writerAcquired]() { return writerAcquired.load(); }, 20ms),
+                "waiting writer should wait for active write"
+            );
+        }
+
+        expectTrue(
+            waitUntil([&readerAcquired]() { return readerAcquired.load(); }),
+            "blocked read should acquire after active write releases"
+        );
+        expectTrue(
+            !writerAcquired.load(), "blocked read should be granted before the next writer"
+        );
+
+        releaseReader.set_value();
+        reader.join();
+
+        expectTrue(
+            waitUntil([&writerAcquired]() { return writerAcquired.load(); }),
+            "waiting writer should acquire after the promoted read releases"
+        );
+        writer.join();
+    }
+
+    void expectTryReadDoesNotCreatePriorityOverWaitingWriter(SceneReadPolicy readPolicy) {
+        SharedScene scene{readPolicy};
+        std::promise<void> writerStarted{};
+        std::future<void> writerStartedFuture = writerStarted.get_future();
+        std::atomic<bool> writerAcquired = false;
+        std::thread writer{};
+
+        {
+            auto initialWrite = scene.write();
+            writer = std::thread([&scene, &writerStarted, &writerAcquired]() {
+                writerStarted.set_value();
+                auto writeAccess = scene.write();
+                writerAcquired.store(true);
+            });
+
+            writerStartedFuture.wait();
+            expectTrue(!scene.tryRead().has_value(), "tryRead should fail during active write");
+            expectTrue(
+                !waitUntil([&writerAcquired]() { return writerAcquired.load(); }, 20ms),
+                "waiting writer should stay blocked until active write releases"
+            );
+        }
+
+        expectTrue(
+            waitUntil([&writerAcquired]() { return writerAcquired.load(); }),
+            "failed tryRead should not create read priority over a waiting writer"
+        );
+        writer.join();
+    }
+
     void testRepeatedSharedSceneConstructionReleasesScene() {
         for (int i = 0; i < 100; ++i) {
             auto scene = std::make_unique<SharedScene>();
@@ -196,6 +285,133 @@ namespace {
         consumer.join();
         expectTrue(consumerReturned.load(), "blocking write access should return after release");
         expectTrue(writeAccess.has_value(), "blocking write access should produce a handle");
+    }
+
+    void testBlockedReadGetsPriorityAheadOfWaitingWriter() {
+        expectBlockedReadGetsPriorityAheadOfWaitingWriter(SceneReadPolicy::Greedy);
+        expectBlockedReadGetsPriorityAheadOfWaitingWriter(SceneReadPolicy::Balanced);
+    }
+
+    void testTryReadDoesNotCreatePriorityOverWaitingWriter() {
+        expectTryReadDoesNotCreatePriorityOverWaitingWriter(SceneReadPolicy::Greedy);
+        expectTryReadDoesNotCreatePriorityOverWaitingWriter(SceneReadPolicy::Balanced);
+    }
+
+    void testGreedyPolicyAllowsFreshReadersPastWaitingWriter() {
+        SharedScene scene{SceneReadPolicy::Greedy};
+        std::promise<void> secondReaderStarted{};
+        std::promise<void> writerStarted{};
+        std::promise<void> releaseSecondReader{};
+        std::future<void> secondReaderStartedFuture = secondReaderStarted.get_future();
+        std::future<void> writerStartedFuture = writerStarted.get_future();
+        std::shared_future<void> releaseSecondReaderSignal =
+            releaseSecondReader.get_future().share();
+        std::atomic<bool> secondReaderAcquired = false;
+        std::atomic<bool> writerAcquired = false;
+        std::thread secondReader{};
+        std::thread writer{};
+
+        {
+            auto firstReader = scene.read();
+            writer = std::thread([&scene, &writerStarted, &writerAcquired]() {
+                writerStarted.set_value();
+                auto writeAccess = scene.write();
+                writerAcquired.store(true);
+            });
+
+            writerStartedFuture.wait();
+            secondReader = std::thread([&scene,
+                                        &secondReaderStarted,
+                                        &releaseSecondReaderSignal,
+                                        &secondReaderAcquired]() {
+                secondReaderStarted.set_value();
+                auto readAccess = scene.read();
+                secondReaderAcquired.store(true);
+                releaseSecondReaderSignal.wait();
+            });
+
+            secondReaderStartedFuture.wait();
+
+            expectTrue(
+                waitUntil([&secondReaderAcquired]() { return secondReaderAcquired.load(); }),
+                "greedy policy should allow a fresh reader past a waiting writer"
+            );
+            expectTrue(
+                !writerAcquired.load(),
+                "waiting writer should remain blocked while readers still hold access"
+            );
+        }
+
+        expectTrue(
+            !writerAcquired.load(),
+            "waiting writer should stay blocked until the fresh reader releases"
+        );
+
+        releaseSecondReader.set_value();
+        secondReader.join();
+
+        expectTrue(
+            waitUntil([&writerAcquired]() { return writerAcquired.load(); }),
+            "waiting writer should acquire after all readers release"
+        );
+        writer.join();
+    }
+
+    void testBalancedPolicyBlocksFreshReadersBehindWaitingWriter() {
+        SharedScene scene{SceneReadPolicy::Balanced};
+        std::promise<void> secondReaderStarted{};
+        std::promise<void> writerStarted{};
+        std::promise<void> releaseWriter{};
+        std::future<void> secondReaderStartedFuture = secondReaderStarted.get_future();
+        std::future<void> writerStartedFuture = writerStarted.get_future();
+        std::shared_future<void> releaseWriterSignal = releaseWriter.get_future().share();
+        std::atomic<bool> secondReaderAcquired = false;
+        std::atomic<bool> writerAcquired = false;
+        std::thread secondReader{};
+        std::thread writer{};
+
+        {
+            auto firstReader = scene.read();
+            writer =
+                std::thread([&scene, &writerStarted, &releaseWriterSignal, &writerAcquired]() {
+                    writerStarted.set_value();
+                    auto writeAccess = scene.write();
+                    writerAcquired.store(true);
+                    releaseWriterSignal.wait();
+                });
+            secondReader = std::thread([&scene, &secondReaderStarted, &secondReaderAcquired]() {
+                secondReaderStarted.set_value();
+                auto readAccess = scene.read();
+                secondReaderAcquired.store(true);
+            });
+
+            writerStartedFuture.wait();
+            secondReaderStartedFuture.wait();
+
+            expectTrue(
+                !waitUntil(
+                    [&secondReaderAcquired]() { return secondReaderAcquired.load(); }, 20ms
+                ),
+                "balanced policy should not let a fresh reader bypass a waiting writer"
+            );
+        }
+
+        expectTrue(
+            waitUntil([&writerAcquired]() { return writerAcquired.load(); }),
+            "waiting writer should acquire once existing readers release"
+        );
+        expectTrue(
+            !secondReaderAcquired.load(),
+            "new reader should remain blocked until the waiting writer finishes"
+        );
+
+        releaseWriter.set_value();
+        writer.join();
+        expectTrue(
+            waitUntil([&secondReaderAcquired]() { return secondReaderAcquired.load(); }),
+            "blocked reader should acquire after the waiting writer releases"
+        );
+        secondReader.join();
     }
 
     void testManyReadersShareAccessAndBlockWriter() {
@@ -420,6 +636,10 @@ int main() {
     testTryAccessSucceedsAfterConflictingHandleRelease();
     testBlockingReadWaitsForWriteRelease();
     testBlockingWriteWaitsForReadRelease();
+    testBlockedReadGetsPriorityAheadOfWaitingWriter();
+    testTryReadDoesNotCreatePriorityOverWaitingWriter();
+    testGreedyPolicyAllowsFreshReadersPastWaitingWriter();
+    testBalancedPolicyBlocksFreshReadersBehindWaitingWriter();
     testManyReadersShareAccessAndBlockWriter();
     testReadChildKeepsParentLeaseAfterRootRelease();
     testWriteChildKeepsParentLeaseAfterRootRelease();
