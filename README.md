@@ -152,6 +152,39 @@ Tests if available will automatically be bundled by `cmake --build build --targe
 
 To run tests utilise `ctest --test-dir tests --output-on-failure` inside the target bundle directory.
 
+### CUDA Tests And Sanitizers
+
+`Debug` is the default development build and enables sanitizers across project code and tests. This is useful for application debugging, but CUDA runtime/device code can produce sanitizer noise that is not always actionable.
+
+Use a separate `RelWithDebInfo` build directory when validating tests (especially CUDA heavy ones) without sanitizers:
+
+```bash
+cmake -S . \
+  -B build-relwithdebinfo-tests \
+  -G Ninja \
+  -DCMAKE_TOOLCHAIN_FILE=/workspaces/repo/toolchains/jetson/jetson-aarch64.cmake \
+  -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+  -DENABLE_TESTS=ON \
+  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+&& cmake --build build-relwithdebinfo-tests -j2
+```
+
+If you still want the `Debug` sanitizer coverage, the `Debug` bundle includes `cmake/suppressions`. From the bundle root you can rerun tests with the CUDA suppression file:
+
+```bash
+cd build/bundle
+LSAN_OPTIONS="suppressions=$(pwd)/cmake/suppressions/lsan_cuda.supp:print_suppressions=1:verbosity=1" \
+ctest --test-dir tests --output-on-failure
+```
+
+Finally, for CUDA-specific diagnostics, run `compute-sanitizer` directly against the target test binary (`RelWithDebInfo` is best to avoid conflict with CUDA sanitizers and GCC ones):
+
+```bash
+for tool in memcheck racecheck initcheck synccheck; do
+  compute-sanitizer --tool "$tool" --leak-check full --report-api-errors all "./tests/<TEST_BINARY>" || break
+done
+```
+
 ---
 
 ### Toolchain Smoke Tests (NEEDS UPDATE)

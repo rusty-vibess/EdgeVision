@@ -85,3 +85,8 @@ endif()
 if(EXISTS "${EDGEVISION_INSTALL_DIR}/lib64")
     file(COPY "${EDGEVISION_INSTALL_DIR}/lib64" DESTINATION "${EDGEVISION_BUNDLE_DIR}")
 endif()
+if(EXISTS "${CMAKE_SOURCE_DIR}/../cmake/suppressions" AND ${CMAKE_BUILD_TYPE} EQUAL "Debug")
+    file(MAKE_DIRECTORY "${EDGEVISION_BUNDLE_DIR}/cmake")
+    file(COPY "${CMAKE_SOURCE_DIR}/../cmake/suppressions" DESTINATION "${EDGEVISION_BUNDLE_DIR}/cmake")
+endif()
+
