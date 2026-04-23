@@ -1,7 +1,7 @@
 #include "model/scene/SharedScene.hpp"
 
 #include <memory>
-#include <shared_mutex>
+#include <mutex>
 #include <stdexcept>
 #include <utility>
 
@@ -68,7 +68,8 @@ namespace edgevision::model::scene {
     SceneWriteAccess::SceneWriteAccess(std::shared_ptr<SceneAccessLease> lease, VoxelRegion region)
         : m_lease(std::move(lease)), m_region(region) {}
 
-    SharedScene::SharedScene() : m_state(std::make_shared<SharedSceneState>()) {}
+    SharedScene::SharedScene(SceneReadPolicy readPolicy)
+        : m_state(std::make_shared<SharedSceneState>(readPolicy)) {}
 
     SharedScene::~SharedScene() = default;
     SharedScene::SharedScene(SharedScene&& other) noexcept = default;
@@ -103,7 +104,7 @@ namespace edgevision::model::scene {
     }
 
     SceneVersionId SharedScene::version() const {
-        std::shared_lock lock(m_state->mutex);
+        std::lock_guard lock(m_state->mutex);
         return m_state->sceneVersionId;
     }
 
@@ -115,6 +116,7 @@ namespace edgevision::model::scene {
             );
         }
 
+        std::lock_guard lock(m_state->mutex);
         ++m_state->sceneVersionId;
         lease.setVersion(m_state->sceneVersionId);
         return m_state->sceneVersionId;

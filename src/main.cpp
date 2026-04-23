@@ -15,7 +15,7 @@
 #include "streaming/RenderServer.hpp"
 #include "types/HybridTypes.hpp"
 
-/// Usage:  ./EdgeVision [--port 6688] [--enable-capture]
+/// Usage:  ./EdgeVision [--port 6688] [--enable-capture] [--read-policy greedy|balanced]
 int main(int argc, char* argv[]) {
     const auto parseResult = edgevision::config::parseCommandLine(argc, argv);
     if (!parseResult.parsed()) {
