@@ -20,7 +20,7 @@ set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
 set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
 set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY)
 
-set(Torch_DIR "/opt/jetson-sysroot-overlay/install/share/cmake/Torch" CACHE PATH "Torch CMake config dir")
+set(Torch_DIR "/opt/jetson-sysroot-overlay/install/share/cmake/Torch" CACHE PATH "" FORCE)
 
 set(CUDA_NVCC_EXECUTABLE "/opt/jetson-sysroot/usr/local/cuda-12.6/bin/nvcc" CACHE PATH "" FORCE)
 set(CMAKE_CUDA_COMPILER "/opt/jetson-sysroot/usr/local/cuda-12.6/bin/nvcc" CACHE PATH "" FORCE)
@@ -29,7 +29,7 @@ set(CMAKE_CUDA_COMPILER "/opt/jetson-sysroot/usr/local/cuda-12.6/bin/nvcc" CACHE
 set(CUDAToolkit_ROOT "/opt/jetson-sysroot/usr/local/cuda-12.6")
 set(CUDA_TOOLKIT_ROOT_DIR "/opt/jetson-sysroot/usr/local/cuda-12.6")  # for older logic
 set(CUDA_HOME "/opt/jetson-sysroot/usr/local/cuda-12.6")
-set(CUDA_CUDART_LIBRARY "/usr/local/cuda-12.6/targets/aarch64-linux/lib/libcudart.so" CACHE FILEPATH "" FORCE)
+set(CUDA_CUDART_LIBRARY "/opt/jetson-sysroot/usr/local/cuda-12.6/targets/aarch64-linux/lib/libcudart.so" CACHE FILEPATH "" FORCE)
 
 list(PREPEND CMAKE_LIBRARY_PATH "/usr/local/cuda-12.6/targets/aarch64-linux/lib")
 list(PREPEND CMAKE_LIBRARY_PATH "/usr/local/cuda-12.6/targets/aarch64-linux/lib/stubs")
