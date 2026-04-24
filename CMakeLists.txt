@@ -103,6 +103,8 @@ add_custom_target(bundle
     -D EDGEVISION_BUNDLE_DIR="${EDGEVISION_BUNDLE_DIR}"
     -D EDGEVISION_BINARY="$<TARGET_FILE:EdgeVision>"
     -D EDGEVISION_EXTRA_BINARIES="${_edgevision_bundle_extra_binaries}"
+    -D EDGEVISION_BUILD_TYPE="${CMAKE_BUILD_TYPE}"
+    -D EDGEVISION_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
     -P "${CMAKE_CURRENT_LIST_DIR}/cmake/bundle.cmake"
     DEPENDS EdgeVision
 )
