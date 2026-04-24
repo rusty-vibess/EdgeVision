@@ -510,7 +510,10 @@ namespace {
         {
             auto foreignWrite = otherScene.write();
             expectThrows<std::invalid_argument>(
-                [&scene, &foreignWrite]() { scene.publish(foreignWrite); },
+                [&scene, &foreignWrite]() {
+                    [[maybe_unused]] const SceneVersionId ignoredVersion =
+                        scene.publish(foreignWrite);
+                },
                 "publish should reject write access from another scene"
             );
         }
@@ -600,11 +603,16 @@ namespace {
                 &movedReadScene == &movedReadAccess.scene(), "moved read access should stay valid"
             );
             expectThrows<std::logic_error>(
-                [&readAccess]() { readAccess.scene(); },
+                [&readAccess]() {
+                    [[maybe_unused]] const InfiniTamScene& ignoredScene = readAccess.scene();
+                },
                 "moved-from read access should reject scene access"
             );
             expectThrows<std::logic_error>(
-                [&readAccess]() { readAccess.child(makeRegion(1)); },
+                [&readAccess]() {
+                    [[maybe_unused]] const SceneReadAccess ignoredChild =
+                        readAccess.child(makeRegion(1));
+                },
                 "moved-from read access should reject child access"
             );
         }
@@ -618,11 +626,16 @@ namespace {
                 "moved write access should stay valid"
             );
             expectThrows<std::logic_error>(
-                [&writeAccess]() { writeAccess.scene(); },
+                [&writeAccess]() {
+                    [[maybe_unused]] InfiniTamScene& ignoredScene = writeAccess.scene();
+                },
                 "moved-from write access should reject scene access"
             );
             expectThrows<std::logic_error>(
-                [&writeAccess]() { writeAccess.child(makeRegion(1)); },
+                [&writeAccess]() {
+                    [[maybe_unused]] const SceneWriteAccess ignoredChild =
+                        writeAccess.child(makeRegion(1));
+                },
                 "moved-from write access should reject child access"
             );
         }
