@@ -1,4 +1,5 @@
 find_package(readerwriterqueue CONFIG REQUIRED)
+find_package(infinitam CONFIG REQUIRED)
 
 add_library(model)
 target_sources(model PRIVATE
@@ -8,6 +9,9 @@ target_sources(model PRIVATE
     src/frame/state/FrameLifecycleTracker.cpp
     src/frame/utils/FrameValidator.cpp
     src/frame/utils/Submission.cpp
+    src/scene/state/SceneAccessLease.cpp
+    src/scene/state/SharedSceneState.cpp
+    src/scene/SharedScene.cpp
 )
 
 target_include_directories(model PUBLIC
@@ -15,10 +19,15 @@ target_include_directories(model PUBLIC
 )
 target_include_directories(model PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/frame/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/scene/include
+)
+target_include_directories(model SYSTEM PUBLIC
+    ${CMAKE_SYSROOT}/usr/local/cuda-12.6/include
 )
 
 target_link_libraries(model PUBLIC
     readerwriterqueue::readerwriterqueue
+    InfiniTAM::ITMLib
 )
 
 if(ENABLE_TESTS)
