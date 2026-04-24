@@ -7,9 +7,9 @@ namespace edgevision::model::frame {
     enum class FrameLifecycleState {
         Captured,
         Stored,
-        QueuedForFpga,
-        SentToFpga,
-        FusionResultReceived,
+        ReadyForConsumer,
+        DispatchedToConsumer,
+        Consumed,
         Dropped,
         Invalid,
         Failed,
@@ -20,9 +20,9 @@ namespace edgevision::model::frame {
         FrameLifecycleState state = FrameLifecycleState::Captured;
         bool captured = false;
         bool stored = false;
-        bool queuedForFpga = false;
-        bool sentToFpga = false;
-        bool fusionResultReceived = false;
+        bool readyForConsumer = false;
+        bool dispatchedToConsumer = false;
+        bool consumed = false;
         bool dropped = false;
         bool invalid = false;
         bool failed = false;

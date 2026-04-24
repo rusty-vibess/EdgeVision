@@ -10,7 +10,6 @@
 #include "model/frame/types/frame.hpp"
 #include "model/frame/types/identity.hpp"
 #include "model/frame/types/lifecycle.hpp"
-#include "model/frame/types/packet.hpp"
 #include "model/frame/types/store_status.hpp"
 #include "model/frame/types/submission.hpp"
 
@@ -18,7 +17,7 @@ namespace edgevision::model::frame {
 
     class FrameHistory;
     class FrameLifecycleTracker;
-    class FramePacketQueue;
+    class ReadyFrameQueue;
 
     class FrameStore final {
       public:
@@ -34,9 +33,9 @@ namespace edgevision::model::frame {
         [[nodiscard]] std::optional<Frame> getFrame(FrameId frameId) const;
         [[nodiscard]] std::vector<Frame> getRecentFrames(std::size_t count) const;
 
-        [[nodiscard]] std::optional<FramePacket> getNextFramePacket() const;
-        [[nodiscard]] FramePacket waitForNextFramePacket() const;
-        [[nodiscard]] bool markFramePacketSent(FrameId frameId);
+        [[nodiscard]] std::optional<Frame> tryDequeueReadyFrame() const;
+        [[nodiscard]] Frame waitDequeueReadyFrame() const;
+        [[nodiscard]] bool markFrameDispatched(FrameId frameId);
 
         [[nodiscard]] FrameStoreStatus getStatus() const;
         [[nodiscard]] std::optional<FrameLifecycle> getFrameLifecycle(FrameId frameId) const;
@@ -51,7 +50,7 @@ namespace edgevision::model::frame {
         mutable std::shared_mutex m_mutex{};
         std::unique_ptr<FrameHistory> m_history{};
         std::unique_ptr<FrameLifecycleTracker> m_lifecycleTracker{};
-        std::unique_ptr<FramePacketQueue> m_packetQueue{};
+        std::unique_ptr<ReadyFrameQueue> m_readyFrameQueue{};
 
         std::size_t m_acceptedFrameCount = 0;
         std::size_t m_rejectedFrameCount = 0;
