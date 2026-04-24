@@ -10,7 +10,9 @@ target_sources(model PRIVATE
     src/frame/utils/FrameValidator.cpp
     src/frame/utils/Submission.cpp
     src/scene/state/SceneAccessLease.cpp
+    src/scene/state/SceneVersionHistory.cpp
     src/scene/state/SharedSceneState.cpp
+    src/scene/SceneVersionStore.cpp
     src/scene/SharedScene.cpp
 )
 

@@ -35,7 +35,8 @@ namespace edgevision::model::frame {
 
         [[nodiscard]] std::optional<Frame> tryDequeueReadyFrame() const;
         [[nodiscard]] Frame waitDequeueReadyFrame() const;
-        [[nodiscard]] bool markFrameDispatched(FrameId frameId);
+        [[nodiscard]] bool markFrameConsumed(FrameId frameId);
+        [[nodiscard]] bool markFrameFailed(FrameId frameId);
 
         [[nodiscard]] FrameStoreStatus getStatus() const;
         [[nodiscard]] std::optional<FrameLifecycle> getFrameLifecycle(FrameId frameId) const;

@@ -45,7 +45,7 @@ namespace edgevision::model::frame {
         validationContext.hasEvictableFrame =
             m_history
                 ->findOldestEvictable([this](FrameId frameId) {
-                    return !m_lifecycleTracker->isReadyForConsumer(frameId);
+                    return !m_lifecycleTracker->isProtectedFromEviction(frameId);
                 })
                 .has_value();
         FrameSubmissionResult result = FrameValidator::validate(frame, validationContext);
@@ -89,21 +89,44 @@ namespace edgevision::model::frame {
     }
 
     std::optional<Frame> FrameStore::tryDequeueReadyFrame() const {
-        return m_readyFrameQueue->tryDequeue();
+        std::optional<Frame> frame = m_readyFrameQueue->tryDequeue();
+        if (!frame.has_value()) {
+            return std::nullopt;
+        }
+
+        std::unique_lock lock(m_mutex);
+        m_lifecycleTracker->markDispatched(frame->frameId);
+        return frame;
     }
 
     Frame FrameStore::waitDequeueReadyFrame() const {
-        return m_readyFrameQueue->waitDequeue();
+        Frame frame = m_readyFrameQueue->waitDequeue();
+
+        std::unique_lock lock(m_mutex);
+        m_lifecycleTracker->markDispatched(frame.frameId);
+        return frame;
     }
 
-    bool FrameStore::markFrameDispatched(FrameId frameId) {
+    bool FrameStore::markFrameConsumed(FrameId frameId) {
         std::unique_lock lock(m_mutex);
 
-        if (!m_readyFrameQueue->markDispatched(frameId)) {
+        if (!m_readyFrameQueue->markCompleted(frameId)) {
             return false;
         }
 
-        m_lifecycleTracker->markDispatched(frameId);
+        m_lifecycleTracker->markConsumed(frameId);
+        evictOldFramesLocked();
+        return true;
+    }
+
+    bool FrameStore::markFrameFailed(FrameId frameId) {
+        std::unique_lock lock(m_mutex);
+
+        if (!m_readyFrameQueue->markCompleted(frameId)) {
+            return false;
+        }
+
+        m_lifecycleTracker->markFailed(frameId);
         evictOldFramesLocked();
         return true;
     }
@@ -139,7 +162,7 @@ namespace edgevision::model::frame {
             const std::optional<FrameId> frameId =
                 m_history->findOldestEvictable([this, latestFrameId](FrameId candidateFrameId) {
                     return (!latestFrameId.has_value() || candidateFrameId != *latestFrameId)
-                        && !m_lifecycleTracker->isReadyForConsumer(candidateFrameId);
+                        && !m_lifecycleTracker->isProtectedFromEviction(candidateFrameId);
                 });
 
             if (!frameId.has_value()) {

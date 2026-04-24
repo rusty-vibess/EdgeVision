@@ -26,7 +26,7 @@ namespace edgevision::model::frame {
 
         std::lock_guard lock(m_mutex);
         m_readyFrameIds.erase(frame.frameId);
-        m_dispatchedFrameIds.insert(frame.frameId);
+        m_inFlightFrameIds.insert(frame.frameId);
         return frame;
     }
 
@@ -36,17 +36,17 @@ namespace edgevision::model::frame {
 
         std::lock_guard lock(m_mutex);
         m_readyFrameIds.erase(frame.frameId);
-        m_dispatchedFrameIds.insert(frame.frameId);
+        m_inFlightFrameIds.insert(frame.frameId);
         return frame;
     }
 
-    bool ReadyFrameQueue::markDispatched(FrameId frameId) {
+    bool ReadyFrameQueue::markCompleted(FrameId frameId) {
         std::lock_guard lock(m_mutex);
-        if (!m_dispatchedFrameIds.contains(frameId)) {
+        if (!m_inFlightFrameIds.contains(frameId)) {
             return false;
         }
 
-        m_dispatchedFrameIds.erase(frameId);
+        m_inFlightFrameIds.erase(frameId);
         return true;
     }
 

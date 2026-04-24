@@ -96,8 +96,11 @@ namespace {
         );
         expectEq(
             lifecycle->state,
-            FrameLifecycleState::ReadyForConsumer,
-            "accepted lifecycle state should be ready_for_consumer"
+            FrameLifecycleState::DispatchedToConsumer,
+            "dequeue should transition lifecycle state to dispatched_to_consumer"
+        );
+        expectTrue(
+            lifecycle->dispatchedToConsumer, "dequeue should record dispatched_to_consumer"
         );
 
         const FrameStoreStatus status = store.getStatus();
@@ -193,29 +196,35 @@ namespace {
         expectTrue(firstFrame.has_value(), "first ready frame should be available");
         expectEq(firstFrame->frameId, FrameId{1}, "ready frame queue should be oldest-first");
 
-        expectTrue(!store.markFrameDispatched(2), "cannot mark a non-dequeued frame dispatched");
-        expectTrue(store.markFrameDispatched(1), "first dequeued frame should mark dispatched");
+        expectTrue(!store.markFrameConsumed(2), "cannot consume a non-dequeued frame");
+        expectTrue(store.markFrameConsumed(1), "first dequeued frame should mark consumed");
 
-        const std::optional<FrameLifecycle> dispatchedLifecycle = store.getFrameLifecycle(1);
+        const std::optional<FrameLifecycle> consumedLifecycle = store.getFrameLifecycle(1);
+        expectTrue(consumedLifecycle.has_value(), "consumed frame lifecycle should be tracked");
         expectTrue(
-            dispatchedLifecycle.has_value(), "dispatched frame lifecycle should be tracked"
-        );
-        expectTrue(
-            dispatchedLifecycle->dispatchedToConsumer,
+            consumedLifecycle->dispatchedToConsumer,
             "lifecycle should record dispatched_to_consumer"
         );
+        expectTrue(consumedLifecycle->consumed, "lifecycle should record consumed");
         expectEq(
-            dispatchedLifecycle->state,
-            FrameLifecycleState::DispatchedToConsumer,
-            "lifecycle state should be dispatched_to_consumer"
+            consumedLifecycle->state,
+            FrameLifecycleState::Consumed,
+            "lifecycle state should be consumed"
         );
 
         const auto secondFrame = store.tryDequeueReadyFrame();
         expectTrue(secondFrame.has_value(), "second ready frame should remain queued");
         expectEq(secondFrame->frameId, FrameId{2}, "second ready frame should become queue front");
 
-        expectTrue(store.markFrameDispatched(2), "second frame should mark dispatched");
+        expectTrue(store.markFrameFailed(2), "second frame should mark failed");
         expectTrue(!store.tryDequeueReadyFrame().has_value(), "ready frame queue should be empty");
+
+        const std::optional<FrameLifecycle> failedLifecycle = store.getFrameLifecycle(2);
+        expectTrue(failedLifecycle.has_value(), "failed frame lifecycle should be tracked");
+        expectTrue(failedLifecycle->failed, "lifecycle should record failed");
+        expectEq(
+            failedLifecycle->state, FrameLifecycleState::Failed, "lifecycle state should be failed"
+        );
     }
 
     void testReadyFrameDequeueConsumes() {
@@ -238,8 +247,8 @@ namespace {
             "dequeue should consume ready frames"
         );
 
-        expectTrue(store.markFrameDispatched(1), "first dequeued frame should mark dispatched");
-        expectTrue(store.markFrameDispatched(2), "second dequeued frame should mark dispatched");
+        expectTrue(store.markFrameConsumed(1), "first dequeued frame should mark consumed");
+        expectTrue(store.markFrameConsumed(2), "second dequeued frame should mark consumed");
         expectTrue(!store.tryDequeueReadyFrame().has_value(), "ready frame queue should be empty");
     }
 
@@ -276,24 +285,23 @@ namespace {
         const std::optional<FrameLifecycle> lifecycle = store.getFrameLifecycle(1);
         expectTrue(lifecycle.has_value(), "dequeued frame lifecycle should be tracked");
         expectTrue(
-            lifecycle->readyForConsumer && !lifecycle->dispatchedToConsumer,
-            "blocking dequeue should not mark frame dispatched"
+            lifecycle->dispatchedToConsumer, "blocking dequeue should mark frame dispatched"
         );
-        expectTrue(store.markFrameDispatched(1), "dequeued frame should mark dispatched");
+        expectTrue(store.markFrameConsumed(1), "dequeued frame should mark consumed");
     }
 
-    void testBoundedHistoryEvictsDispatchedFrames() {
+    void testBoundedHistoryEvictsTerminalFrames() {
         FrameStore store(FrameStoreConfig{2, 4});
         expectTrue(store.submitFrame(makeFrame(1, 100)).accepted(), "frame 1 should submit");
         expectTrue(store.tryDequeueReadyFrame().has_value(), "frame 1 should dequeue");
-        expectTrue(store.markFrameDispatched(1), "frame 1 should mark dispatched");
+        expectTrue(store.markFrameConsumed(1), "frame 1 should mark consumed");
         expectTrue(store.submitFrame(makeFrame(2, 200)).accepted(), "frame 2 should submit");
         expectTrue(store.tryDequeueReadyFrame().has_value(), "frame 2 should dequeue");
-        expectTrue(store.markFrameDispatched(2), "frame 2 should mark dispatched");
+        expectTrue(store.markFrameFailed(2), "frame 2 should mark failed");
         expectTrue(store.submitFrame(makeFrame(3, 300)).accepted(), "frame 3 should submit");
 
-        expectTrue(!store.getFrame(1).has_value(), "oldest dispatched frame should be evicted");
-        expectTrue(store.getFrame(2).has_value(), "recent dispatched frame should remain");
+        expectTrue(!store.getFrame(1).has_value(), "oldest terminal frame should be evicted");
+        expectTrue(store.getFrame(2).has_value(), "recent terminal frame should remain");
         expectTrue(store.getFrame(3).has_value(), "latest frame should remain");
 
         const auto recentFrames = store.getRecentFrames(5);
@@ -316,7 +324,7 @@ namespace {
         const auto returnedFrame = store.getLastFrame();
         expectTrue(returnedFrame.has_value(), "frame 1 should be readable");
         expectTrue(store.tryDequeueReadyFrame().has_value(), "frame 1 should dequeue");
-        expectTrue(store.markFrameDispatched(1), "frame 1 should mark dispatched");
+        expectTrue(store.markFrameConsumed(1), "frame 1 should mark consumed");
         expectTrue(store.submitFrame(makeFrame(2, 200)).accepted(), "frame 2 should submit");
 
         expectTrue(!store.getFrame(1).has_value(), "frame 1 should be evicted from store");
@@ -348,6 +356,22 @@ namespace {
             store.getStatus().readyFrameCount,
             std::size_t{1},
             "history-full rejection should not queue frame"
+        );
+    }
+
+    void testHistoryFullProtectsDispatchedFrames() {
+        FrameStore store(FrameStoreConfig{1, 2});
+        expectTrue(store.submitFrame(makeFrame(1, 100)).accepted(), "frame 1 should submit");
+        expectTrue(store.tryDequeueReadyFrame().has_value(), "frame 1 should dequeue");
+
+        const FrameSubmissionResult result = store.submitFrame(makeFrame(2, 200));
+        expectEq(
+            result.code,
+            FrameSubmissionCode::HistoryFull,
+            "store should not evict a dispatched in-flight frame"
+        );
+        expectTrue(
+            !store.getFrame(2).has_value(), "history-full rejection should not store frame"
         );
     }
 
@@ -407,9 +431,10 @@ int main() {
     testReadyFrameHandoffLifecycle();
     testReadyFrameDequeueConsumes();
     testBlockingReadyFrameDequeueWaitsForSubmission();
-    testBoundedHistoryEvictsDispatchedFrames();
+    testBoundedHistoryEvictsTerminalFrames();
     testReturnedFrameSurvivesStoreEviction();
     testHistoryFullProtectsPendingFrames();
+    testHistoryFullProtectsDispatchedFrames();
     testReadyFrameQueueFullRejectsWithoutStateMutation();
     testConcurrentReadSmoke();
 

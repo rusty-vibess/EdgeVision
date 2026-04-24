@@ -21,14 +21,14 @@ namespace edgevision::model::frame {
         [[nodiscard]] bool tryEnqueue(const Frame& frame);
         [[nodiscard]] std::optional<Frame> tryDequeue();
         [[nodiscard]] Frame waitDequeue();
-        [[nodiscard]] bool markDispatched(FrameId frameId);
+        [[nodiscard]] bool markCompleted(FrameId frameId);
         [[nodiscard]] std::size_t sizeApprox() const;
 
       private:
         moodycamel::BlockingReaderWriterCircularBuffer<Frame> m_queue;
         mutable std::mutex m_mutex{};
         std::unordered_set<FrameId> m_readyFrameIds{};
-        std::unordered_set<FrameId> m_dispatchedFrameIds{};
+        std::unordered_set<FrameId> m_inFlightFrameIds{};
     };
 
 } // namespace edgevision::model::frame

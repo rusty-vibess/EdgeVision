@@ -58,6 +58,28 @@ namespace edgevision::model::frame {
         lifecycle->second.dispatchedToConsumer = true;
     }
 
+    void FrameLifecycleTracker::markConsumed(FrameId frameId) {
+        auto lifecycle = m_lifecyclesById.find(frameId);
+        if (lifecycle == m_lifecyclesById.end()) {
+            return;
+        }
+
+        lifecycle->second.state = FrameLifecycleState::Consumed;
+        lifecycle->second.dispatchedToConsumer = true;
+        lifecycle->second.consumed = true;
+    }
+
+    void FrameLifecycleTracker::markFailed(FrameId frameId) {
+        auto lifecycle = m_lifecyclesById.find(frameId);
+        if (lifecycle == m_lifecyclesById.end()) {
+            return;
+        }
+
+        lifecycle->second.state = FrameLifecycleState::Failed;
+        lifecycle->second.dispatchedToConsumer = true;
+        lifecycle->second.failed = true;
+    }
+
     void FrameLifecycleTracker::markDropped(FrameId frameId) {
         auto lifecycle = m_lifecyclesById.find(frameId);
         if (lifecycle == m_lifecyclesById.end()) {
@@ -74,9 +96,17 @@ namespace edgevision::model::frame {
             return false;
         }
 
-        return lifecycle->second.readyForConsumer && !lifecycle->second.dispatchedToConsumer
-            && !lifecycle->second.dropped && !lifecycle->second.invalid
-            && !lifecycle->second.failed;
+        return lifecycle->second.state == FrameLifecycleState::ReadyForConsumer;
+    }
+
+    bool FrameLifecycleTracker::isProtectedFromEviction(FrameId frameId) const {
+        const auto lifecycle = m_lifecyclesById.find(frameId);
+        if (lifecycle == m_lifecyclesById.end()) {
+            return false;
+        }
+
+        return lifecycle->second.state == FrameLifecycleState::ReadyForConsumer
+            || lifecycle->second.state == FrameLifecycleState::DispatchedToConsumer;
     }
 
     std::optional<FrameLifecycle> FrameLifecycleTracker::get(FrameId frameId) const {
