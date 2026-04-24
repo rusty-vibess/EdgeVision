@@ -5,6 +5,7 @@
 namespace {
     using edgevision::config::AppConfig;
     using edgevision::config::parseCommandLine;
+    using edgevision::config::ReadPolicy;
 
     int gFailures = 0;
 
@@ -46,6 +47,7 @@ namespace {
 
         EXPECT_TRUE(result.parsed());
         EXPECT_EQ(result.config.render.port, 6688);
+        EXPECT_EQ(result.config.render.readPolicy, ReadPolicy::Greedy);
         EXPECT_FALSE(result.config.capture.enabled);
     }
 
@@ -72,9 +74,34 @@ namespace {
         EXPECT_TRUE(result.config.capture.enabled);
     }
 
+    void testReadPolicyGreedyOverride() {
+        char executable[] = "EdgeVision";
+        char readPolicyFlag[] = "--read-policy";
+        char readPolicyValue[] = "greedy";
+        char* argv[] = {executable, readPolicyFlag, readPolicyValue};
+
+        const auto result = parseCommandLine(3, argv);
+
+        EXPECT_TRUE(result.parsed());
+        EXPECT_EQ(result.config.render.readPolicy, ReadPolicy::Greedy);
+    }
+
+    void testReadPolicyBalancedOverride() {
+        char executable[] = "EdgeVision";
+        char readPolicyFlag[] = "--read-policy";
+        char readPolicyValue[] = "balanced";
+        char* argv[] = {executable, readPolicyFlag, readPolicyValue};
+
+        const auto result = parseCommandLine(3, argv);
+
+        EXPECT_TRUE(result.parsed());
+        EXPECT_EQ(result.config.render.readPolicy, ReadPolicy::Balanced);
+    }
+
     void testCustomDefaultsArePreserved() {
         AppConfig defaults{};
         defaults.render.port = 9000;
+        defaults.render.readPolicy = ReadPolicy::Balanced;
         defaults.capture.runtime.captureTimeoutMs = 25;
 
         char executable[] = "EdgeVision";
@@ -85,6 +112,7 @@ namespace {
 
         EXPECT_TRUE(result.parsed());
         EXPECT_EQ(result.config.render.port, 9000);
+        EXPECT_EQ(result.config.render.readPolicy, ReadPolicy::Balanced);
         EXPECT_TRUE(result.config.capture.enabled);
         EXPECT_EQ(result.config.capture.runtime.captureTimeoutMs, 25);
     }
@@ -94,6 +122,27 @@ namespace {
         char portFlag[] = "--port";
         char portValue[] = "99999";
         char* argv[] = {executable, portFlag, portValue};
+
+        const auto result = parseCommandLine(3, argv);
+
+        EXPECT_FALSE(result.parsed());
+    }
+
+    void testMissingReadPolicyValueFails() {
+        char executable[] = "EdgeVision";
+        char readPolicyFlag[] = "--read-policy";
+        char* argv[] = {executable, readPolicyFlag};
+
+        const auto result = parseCommandLine(2, argv);
+
+        EXPECT_FALSE(result.parsed());
+    }
+
+    void testInvalidReadPolicyFails() {
+        char executable[] = "EdgeVision";
+        char readPolicyFlag[] = "--read-policy";
+        char readPolicyValue[] = "unknown";
+        char* argv[] = {executable, readPolicyFlag, readPolicyValue};
 
         const auto result = parseCommandLine(3, argv);
 
@@ -115,8 +164,12 @@ int main() {
     testDefaultsAreUsed();
     testPortOverride();
     testEnableCaptureFlag();
+    testReadPolicyGreedyOverride();
+    testReadPolicyBalancedOverride();
     testCustomDefaultsArePreserved();
     testInvalidPortFails();
+    testMissingReadPolicyValueFails();
+    testInvalidReadPolicyFails();
     testUnknownArgumentFails();
 
     if (gFailures != 0) {
