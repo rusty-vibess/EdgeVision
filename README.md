@@ -185,6 +185,8 @@ for tool in memcheck racecheck initcheck synccheck; do
 done
 ```
 
+`ASAN_OPTIONS=alloc_dealloc_mismatch=0` to stop builder_tests error in InfiniTAM upstream.
+
 ---
 
 ### Toolchain Smoke Tests (NEEDS UPDATE)
