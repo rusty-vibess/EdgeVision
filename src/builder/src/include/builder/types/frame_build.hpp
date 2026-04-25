@@ -2,25 +2,19 @@
 
 #include <optional>
 
-#include "model/frame/types/identity.hpp"
+#include "builder/types/runner.hpp"
+#include "model/frame/types/frame.hpp"
 #include "model/scene/types/access.hpp"
 
 namespace edgevision::builder {
 
-    enum class BuildStepStatus {
-        NoFrameAvailable,
+    enum class FrameBuildStatus {
         FrameConsumed,
         FrameFailed,
     };
 
-    enum class BuildFailureReason {
-        None,
-        ViewConversionFailed,
-        TrackingLost,
-    };
-
-    struct BuildStepResult {
-        BuildStepStatus status = BuildStepStatus::NoFrameAvailable;
+    struct FrameBuildResult {
+        FrameBuildStatus status = FrameBuildStatus::FrameFailed;
         BuildFailureReason failureReason = BuildFailureReason::None;
         edgevision::model::frame::FrameId frameId = 0;
         std::optional<edgevision::model::scene::SceneVersionId> sceneVersionId{};

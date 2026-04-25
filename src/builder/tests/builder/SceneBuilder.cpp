@@ -1,19 +1,16 @@
-#include <cstddef>
-#include <cstdint>
-#include <cstring>
+#include "builder/state/SceneBuilder.hpp"
+
 #include <iostream>
-#include <memory>
 #include <optional>
 #include <source_location>
 #include <string_view>
-#include <utility>
-#include <vector>
 
-#include "builder/state/SceneBuilder.hpp"
+#include "config/types/builder.hpp"
+#include "test_frames.hpp"
 
 namespace {
     using namespace edgevision::builder;
-    using namespace edgevision::model::frame;
+    using namespace edgevision::builder::tests;
     using namespace edgevision::model::scene;
 
     int gFailures = 0;
@@ -48,80 +45,20 @@ namespace {
         }
     }
 
-    FrameBuffer makeBuffer(std::vector<std::byte> bytes) {
-        auto storage = std::make_shared<std::vector<std::byte>>(std::move(bytes));
-        return FrameBuffer(storage->data(), storage->size(), storage);
+    int usedBlockCount(const InfiniTamScene& scene) {
+        auto& index = const_cast<decltype(scene.index)&>(scene.index);
+        return index.getNumAllocatedVoxelBlocks() - scene.localVBA.lastFreeBlockId - 1;
     }
 
-    Frame makeValidFrame(FrameId frameId, std::int64_t timestampTicks) {
-        constexpr int width = 16;
-        constexpr int height = 12;
-
-        std::vector<std::byte> rgbStorage(width * height * 4);
-        for (std::size_t index = 0; index < rgbStorage.size(); ++index) {
-            rgbStorage[index] = static_cast<std::byte>(index % 255);
-        }
-
-        std::vector<std::byte> depthStorage(width * height * 2);
-        for (int index = 0; index < width * height; ++index) {
-            const std::uint16_t depthMillimetres = 1000;
-            std::memcpy(
-                depthStorage.data() + static_cast<std::size_t>(index) * sizeof(std::uint16_t),
-                &depthMillimetres,
-                sizeof(depthMillimetres)
-            );
-        }
-
-        Frame frame{};
-        frame.frameId = frameId;
-        frame.timestamp = FrameTimestamp{timestampTicks};
-        frame.rgb.size = ImageSize{width, height};
-        frame.rgb.strideBytes = width * 4;
-        frame.rgb.buffer = makeBuffer(std::move(rgbStorage));
-        frame.depth.size = ImageSize{width, height};
-        frame.depth.strideBytes = width * 2;
-        frame.depth.buffer = makeBuffer(std::move(depthStorage));
-        frame.intrinsics = CameraIntrinsics{525.0f, 525.0f, width / 2.0f, height / 2.0f};
-        return frame;
-    }
-
-    Frame makeInvalidRgbLayoutFrame(FrameId frameId, std::int64_t timestampTicks) {
-        Frame frame = makeValidFrame(frameId, timestampTicks);
-        frame.rgb.size = ImageSize{2, 2};
-        frame.rgb.strideBytes = 6;
-        frame.rgb.buffer = makeBuffer(std::vector<std::byte>(12));
-        frame.depth.size = ImageSize{2, 2};
-        frame.depth.strideBytes = 4;
-        frame.depth.buffer = makeBuffer(std::vector<std::byte>(8));
-        frame.intrinsics = CameraIntrinsics{525.0f, 525.0f, 1.0f, 1.0f};
-        return frame;
-    }
-
-    void testNoPendingFrameReturnsNoOp() {
-        FrameStore frameStore{};
+    void testBootstrapFrameIntegratesPublishesAndStoresSceneVersion() {
         SharedScene sharedScene{};
         SceneVersionStore sceneVersionStore{};
-        SceneBuilder builder(frameStore, sharedScene, sceneVersionStore);
+        SceneBuilder builder(sharedScene, sceneVersionStore);
 
-        const BuildStepResult result = builder.tryProcessNextFrame();
-        expectEq(result.status, BuildStepStatus::NoFrameAvailable, "empty store should no-op");
-        expectTrue(!result.sceneVersionId.has_value(), "no-op should not publish a version");
-    }
-
-    void testBootstrapSuccessPublishesSceneVersionAndConsumesFrame() {
-        FrameStore frameStore{};
-        SharedScene sharedScene{};
-        SceneVersionStore sceneVersionStore{};
-        SceneBuilder builder(frameStore, sharedScene, sceneVersionStore);
-
-        expectTrue(
-            frameStore.submitFrame(makeValidFrame(1, 100)).accepted(), "frame should submit"
-        );
-
-        const BuildStepResult result = builder.tryProcessNextFrame();
+        const FrameBuildResult result = builder.buildFrame(makeValidFrame(1, 100));
         expectEq(
             result.status,
-            BuildStepStatus::FrameConsumed,
+            FrameBuildStatus::FrameConsumed,
             "bootstrap frame should be integrated and consumed"
         );
         expectTrue(result.sceneVersionId.has_value(), "success should publish a scene version");
@@ -141,30 +78,24 @@ namespace {
         );
         expectEq(
             latestVersion->lastIntegratedFrameId,
-            FrameId{1},
+            edgevision::model::frame::FrameId{1},
             "scene version should record integrated frame id"
         );
 
-        const std::optional<FrameLifecycle> lifecycle = frameStore.getFrameLifecycle(1);
-        expectTrue(lifecycle.has_value(), "consumed frame should retain lifecycle");
-        expectEq(
-            lifecycle->state, FrameLifecycleState::Consumed, "frame should be marked consumed"
+        const SceneReadAccess readAccess = sharedScene.read();
+        expectTrue(
+            usedBlockCount(readAccess.scene()) > 0,
+            "successful build should allocate TSDF scene blocks"
         );
     }
 
-    void testConversionFailureMarksFrameFailedWithoutPublishingVersion() {
-        FrameStore frameStore{};
+    void testInvalidFrameLayoutFailsBeforePublish() {
         SharedScene sharedScene{};
         SceneVersionStore sceneVersionStore{};
-        SceneBuilder builder(frameStore, sharedScene, sceneVersionStore);
+        SceneBuilder builder(sharedScene, sceneVersionStore);
 
-        expectTrue(
-            frameStore.submitFrame(makeInvalidRgbLayoutFrame(1, 100)).accepted(),
-            "frame should submit despite builder-invalid layout"
-        );
-
-        const BuildStepResult result = builder.tryProcessNextFrame();
-        expectEq(result.status, BuildStepStatus::FrameFailed, "invalid layout should fail frame");
+        const FrameBuildResult result = builder.buildFrame(makeInvalidRgbLayoutFrame(1, 100));
+        expectEq(result.status, FrameBuildStatus::FrameFailed, "invalid layout should fail");
         expectEq(
             result.failureReason,
             BuildFailureReason::ViewConversionFailed,
@@ -175,37 +106,25 @@ namespace {
             !sceneVersionStore.latest().has_value(),
             "failed conversion should not write scene version metadata"
         );
-
-        const std::optional<FrameLifecycle> lifecycle = frameStore.getFrameLifecycle(1);
-        expectTrue(lifecycle.has_value(), "failed frame should retain lifecycle");
-        expectEq(lifecycle->state, FrameLifecycleState::Failed, "frame should be marked failed");
     }
 
-    void testTrackingFailureMarksFrameFailedAndDoesNotPublishVersion() {
-        FrameStore frameStore{};
+    void testTrackingLossFailsWithoutPublishOrVersionWrite() {
         SharedScene sharedScene{};
         SceneVersionStore sceneVersionStore{};
         SceneBuilder builder(
-            frameStore,
             sharedScene,
             sceneVersionStore,
-            SceneBuilderConfig{.trackerConfig = "type=forcefail"}
+            edgevision::config::BuilderRuntimeConfig{.trackerConfig = "type=forcefail"}
         );
 
-        expectTrue(
-            frameStore.submitFrame(makeValidFrame(1, 100)).accepted(), "frame 1 should submit"
-        );
         expectEq(
-            builder.tryProcessNextFrame().status,
-            BuildStepStatus::FrameConsumed,
+            builder.buildFrame(makeValidFrame(1, 100)).status,
+            FrameBuildStatus::FrameConsumed,
             "bootstrap frame should still integrate"
         );
 
-        expectTrue(
-            frameStore.submitFrame(makeValidFrame(2, 200)).accepted(), "frame 2 should submit"
-        );
-        const BuildStepResult result = builder.tryProcessNextFrame();
-        expectEq(result.status, BuildStepStatus::FrameFailed, "forced tracking loss should fail");
+        const FrameBuildResult result = builder.buildFrame(makeValidFrame(2, 200));
+        expectEq(result.status, FrameBuildStatus::FrameFailed, "forced tracking loss should fail");
         expectEq(
             result.failureReason,
             BuildFailureReason::TrackingLost,
@@ -224,20 +143,13 @@ namespace {
             SceneVersionId{1},
             "tracking failure should not replace latest scene version"
         );
-
-        const std::optional<FrameLifecycle> lifecycle = frameStore.getFrameLifecycle(2);
-        expectTrue(lifecycle.has_value(), "failed tracked frame should retain lifecycle");
-        expectEq(
-            lifecycle->state, FrameLifecycleState::Failed, "tracked failure should mark failed"
-        );
     }
 } // namespace
 
 int main() {
-    testNoPendingFrameReturnsNoOp();
-    testBootstrapSuccessPublishesSceneVersionAndConsumesFrame();
-    testConversionFailureMarksFrameFailedWithoutPublishingVersion();
-    testTrackingFailureMarksFrameFailedAndDoesNotPublishVersion();
+    testBootstrapFrameIntegratesPublishesAndStoresSceneVersion();
+    testInvalidFrameLayoutFailsBeforePublish();
+    testTrackingLossFailsWithoutPublishOrVersionWrite();
 
     if (gFailures != 0) {
         std::cerr << "Tests failed: " << gFailures << '\n';
