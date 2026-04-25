@@ -11,8 +11,8 @@
 #include "ITMLib/Objects/RenderStates/ITMRenderStateFactory.h"
 #include "ITMLib/Trackers/ITMTrackerFactory.h"
 #include "ITMLib/Utils/ITMLibSettings.h"
-#include "builder/types/SceneBuilderConfig.hpp"
 #include "builder/utils/InfiniTamViewConverter.hpp"
+#include "config/types/builder.hpp"
 #include "model/frame/types/camera.hpp"
 #include "model/frame/types/frame.hpp"
 #include "model/frame/types/image.hpp"
@@ -21,26 +21,33 @@
 
 namespace edgevision::builder {
 
-    class InfiniTamBuilderContext final {
+    class InfiniTamPipeline final {
       public:
-        explicit InfiniTamBuilderContext(const SceneBuilderConfig& config = {});
+        explicit InfiniTamPipeline(const edgevision::config::BuilderRuntimeConfig& config = {});
 
+        /// Converts frame buffers into the reusable InfiniTAM view.
         [[nodiscard]] ViewConversionResult prepareView(
             const edgevision::model::frame::Frame& frame
         );
 
+        /// Recreates pipeline state when the scene or frame layout changes.
         void ensurePipelineForScene(
             const edgevision::model::scene::InfiniTamScene& scene,
             const edgevision::model::frame::Frame& frame
         );
 
+        /// Returns whether tracking should run before the next integration.
         [[nodiscard]] bool trackingInitialised() const;
+        /// Tracks the prepared view against the current scene.
         [[nodiscard]] edgevision::model::scene::TrackingStatus track();
+        /// Integrates the prepared view into the current scene.
         [[nodiscard]] edgevision::model::scene::IntegrationStatus integrate(
             edgevision::model::scene::InfiniTamScene& scene
         );
+        /// Prepares the pipeline state for the next tracking pass.
         void prepareForNextTracking(const edgevision::model::scene::InfiniTamScene& scene);
 
+        /// Returns the latest camera pose estimated by the pipeline.
         [[nodiscard]] edgevision::model::scene::Pose4f cameraToWorld() const;
 
       private:
@@ -52,7 +59,7 @@ namespace edgevision::builder {
         );
         void resetView(const edgevision::model::frame::Frame& frame);
 
-        SceneBuilderConfig m_config{};
+        edgevision::config::BuilderRuntimeConfig m_config{};
         ITMLib::ITMLibSettings m_settings{};
         std::string m_trackerConfigStorage{};
 

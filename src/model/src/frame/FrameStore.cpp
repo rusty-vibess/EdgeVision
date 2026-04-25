@@ -1,6 +1,7 @@
 #include "model/frame/FrameStore.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -104,6 +105,19 @@ namespace edgevision::model::frame {
 
         std::unique_lock lock(m_mutex);
         m_lifecycleTracker->markDispatched(frame.frameId);
+        return frame;
+    }
+
+    std::optional<Frame> FrameStore::waitDequeueReadyFrame(
+        std::chrono::milliseconds timeout
+    ) const {
+        std::optional<Frame> frame = m_readyFrameQueue->waitDequeue(timeout);
+        if (!frame.has_value()) {
+            return std::nullopt;
+        }
+
+        std::unique_lock lock(m_mutex);
+        m_lifecycleTracker->markDispatched(frame->frameId);
         return frame;
     }
 

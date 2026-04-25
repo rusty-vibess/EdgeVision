@@ -1,6 +1,7 @@
 #include "frame/queue/ReadyFrameQueue.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <mutex>
 
 namespace edgevision::model::frame {
@@ -33,6 +34,18 @@ namespace edgevision::model::frame {
     Frame ReadyFrameQueue::waitDequeue() {
         Frame frame{};
         m_queue.wait_dequeue(frame);
+
+        std::lock_guard lock(m_mutex);
+        m_readyFrameIds.erase(frame.frameId);
+        m_inFlightFrameIds.insert(frame.frameId);
+        return frame;
+    }
+
+    std::optional<Frame> ReadyFrameQueue::waitDequeue(std::chrono::milliseconds timeout) {
+        Frame frame{};
+        if (!m_queue.wait_dequeue_timed(frame, timeout)) {
+            return std::nullopt;
+        }
 
         std::lock_guard lock(m_mutex);
         m_readyFrameIds.erase(frame.frameId);

@@ -1,4 +1,4 @@
-#include "builder/state/InfiniTamBuilderContext.hpp"
+#include "builder/state/InfiniTamPipeline.hpp"
 
 #include <cstring>
 #include <memory>
@@ -17,7 +17,7 @@ namespace edgevision::builder {
         }
     } // namespace
 
-    InfiniTamBuilderContext::InfiniTamBuilderContext(const SceneBuilderConfig& config)
+    InfiniTamPipeline::InfiniTamPipeline(const edgevision::config::BuilderRuntimeConfig& config)
         : m_config(config) {
         if (!m_config.trackerConfig.empty()) {
             m_trackerConfigStorage = m_config.trackerConfig;
@@ -25,7 +25,7 @@ namespace edgevision::builder {
         }
     }
 
-    ViewConversionResult InfiniTamBuilderContext::prepareView(
+    ViewConversionResult InfiniTamPipeline::prepareView(
         const edgevision::model::frame::Frame& frame
     ) {
         if (needsViewReset(frame)) {
@@ -35,7 +35,7 @@ namespace edgevision::builder {
         return copyFrameToView(*m_view, frame, m_settings.GetMemoryType());
     }
 
-    void InfiniTamBuilderContext::ensurePipelineForScene(
+    void InfiniTamPipeline::ensurePipelineForScene(
         const edgevision::model::scene::InfiniTamScene& scene,
         const edgevision::model::frame::Frame& frame
     ) {
@@ -46,11 +46,11 @@ namespace edgevision::builder {
         resetPipeline(scene, frame);
     }
 
-    bool InfiniTamBuilderContext::trackingInitialised() const {
+    bool InfiniTamPipeline::trackingInitialised() const {
         return m_trackingInitialised;
     }
 
-    edgevision::model::scene::TrackingStatus InfiniTamBuilderContext::track() {
+    edgevision::model::scene::TrackingStatus InfiniTamPipeline::track() {
         m_trackingController->Track(m_trackingState.get(), m_view.get());
         if (m_trackingState->trackerResult == ITMLib::ITMTrackingState::TRACKING_FAILED) {
             return edgevision::model::scene::TrackingStatus::Lost;
@@ -59,7 +59,7 @@ namespace edgevision::builder {
         return edgevision::model::scene::TrackingStatus::Tracked;
     }
 
-    edgevision::model::scene::IntegrationStatus InfiniTamBuilderContext::integrate(
+    edgevision::model::scene::IntegrationStatus InfiniTamPipeline::integrate(
         edgevision::model::scene::InfiniTamScene& scene
     ) {
         m_denseMapper->ProcessFrame(
@@ -69,7 +69,7 @@ namespace edgevision::builder {
         return edgevision::model::scene::IntegrationStatus::Integrated;
     }
 
-    void InfiniTamBuilderContext::prepareForNextTracking(
+    void InfiniTamPipeline::prepareForNextTracking(
         const edgevision::model::scene::InfiniTamScene& scene
     ) {
         m_trackingController->Prepare(
@@ -81,29 +81,27 @@ namespace edgevision::builder {
         );
     }
 
-    edgevision::model::scene::Pose4f InfiniTamBuilderContext::cameraToWorld() const {
+    edgevision::model::scene::Pose4f InfiniTamPipeline::cameraToWorld() const {
         edgevision::model::scene::Pose4f pose{};
         const Matrix4f matrix = m_trackingState->pose_d->GetInvM();
         std::memcpy(pose.matrix.data(), matrix.m, sizeof(matrix.m));
         return pose;
     }
 
-    bool InfiniTamBuilderContext::needsPipelineReset(
+    bool InfiniTamPipeline::needsPipelineReset(
         const edgevision::model::frame::Frame& frame
     ) const {
         return !m_hasPipeline || frame.rgb.size != m_pipelineRgbSize
             || frame.depth.size != m_pipelineDepthSize;
     }
 
-    bool InfiniTamBuilderContext::needsViewReset(
-        const edgevision::model::frame::Frame& frame
-    ) const {
+    bool InfiniTamPipeline::needsViewReset(const edgevision::model::frame::Frame& frame) const {
         return !m_hasViewLayout || frame.rgb.size != m_viewRgbSize
             || frame.depth.size != m_viewDepthSize
             || !sameIntrinsics(frame.intrinsics, m_viewIntrinsics);
     }
 
-    void InfiniTamBuilderContext::resetPipeline(
+    void InfiniTamPipeline::resetPipeline(
         const edgevision::model::scene::InfiniTamScene& scene,
         const edgevision::model::frame::Frame& frame
     ) {
@@ -151,7 +149,7 @@ namespace edgevision::builder {
         m_hasPipeline = true;
     }
 
-    void InfiniTamBuilderContext::resetView(const edgevision::model::frame::Frame& frame) {
+    void InfiniTamPipeline::resetView(const edgevision::model::frame::Frame& frame) {
         const ITMLib::ITMRGBDCalib calib = makeRgbdCalib(frame);
         const Vector2i rgbSize(frame.rgb.size.width, frame.rgb.size.height);
         const Vector2i depthSize(frame.depth.size.width, frame.depth.size.height);

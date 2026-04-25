@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <cstddef>
 #include <mutex>
 #include <optional>
@@ -21,6 +22,7 @@ namespace edgevision::model::frame {
         [[nodiscard]] bool tryEnqueue(const Frame& frame);
         [[nodiscard]] std::optional<Frame> tryDequeue();
         [[nodiscard]] Frame waitDequeue();
+        [[nodiscard]] std::optional<Frame> waitDequeue(std::chrono::milliseconds timeout);
         [[nodiscard]] bool markCompleted(FrameId frameId);
         [[nodiscard]] std::size_t sizeApprox() const;
 

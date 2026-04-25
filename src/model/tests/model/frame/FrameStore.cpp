@@ -290,6 +290,48 @@ namespace {
         expectTrue(store.markFrameConsumed(1), "dequeued frame should mark consumed");
     }
 
+    void testTimedReadyFrameDequeueTimesOutWithoutMutation() {
+        FrameStore store(FrameStoreConfig{4, 4});
+
+        const std::optional<Frame> frame =
+            store.waitDequeueReadyFrame(std::chrono::milliseconds(1));
+        expectTrue(!frame.has_value(), "timed dequeue should return no frame on timeout");
+
+        const FrameStoreStatus status = store.getStatus();
+        expectEq(
+            status.acceptedFrameCount, std::size_t{0}, "timeout should not change accepted count"
+        );
+        expectEq(status.readyFrameCount, std::size_t{0}, "timeout should not change ready count");
+        expectTrue(!status.latestFrameId.has_value(), "timeout should not create a latest frame");
+    }
+
+    void testTimedReadyFrameDequeueReturnsFrameBeforeTimeout() {
+        FrameStore store(FrameStoreConfig{4, 4});
+        std::promise<void> consumerStarted{};
+        std::future<void> started = consumerStarted.get_future();
+        std::optional<Frame> dequeuedFrame{};
+
+        std::thread consumer([&store, &consumerStarted, &dequeuedFrame]() {
+            consumerStarted.set_value();
+            dequeuedFrame = store.waitDequeueReadyFrame(std::chrono::milliseconds(50));
+        });
+
+        started.wait();
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        expectTrue(store.submitFrame(makeFrame(1, 100)).accepted(), "frame 1 should submit");
+        consumer.join();
+
+        expectTrue(dequeuedFrame.has_value(), "timed dequeue should return a submitted frame");
+        expectEq(
+            dequeuedFrame->frameId, FrameId{1}, "timed dequeue should observe submitted frame"
+        );
+
+        const std::optional<FrameLifecycle> lifecycle = store.getFrameLifecycle(1);
+        expectTrue(lifecycle.has_value(), "timed dequeue should track frame lifecycle");
+        expectTrue(lifecycle->dispatchedToConsumer, "timed dequeue should mark frame dispatched");
+        expectTrue(store.markFrameConsumed(1), "timed dequeue should allow frame consumption");
+    }
+
     void testBoundedHistoryEvictsTerminalFrames() {
         FrameStore store(FrameStoreConfig{2, 4});
         expectTrue(store.submitFrame(makeFrame(1, 100)).accepted(), "frame 1 should submit");
@@ -431,6 +473,8 @@ int main() {
     testReadyFrameHandoffLifecycle();
     testReadyFrameDequeueConsumes();
     testBlockingReadyFrameDequeueWaitsForSubmission();
+    testTimedReadyFrameDequeueTimesOutWithoutMutation();
+    testTimedReadyFrameDequeueReturnsFrameBeforeTimeout();
     testBoundedHistoryEvictsTerminalFrames();
     testReturnedFrameSurvivesStoreEviction();
     testHistoryFullProtectsPendingFrames();

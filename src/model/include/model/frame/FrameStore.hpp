@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <cstddef>
 #include <memory>
 #include <optional>
@@ -35,6 +36,9 @@ namespace edgevision::model::frame {
 
         [[nodiscard]] std::optional<Frame> tryDequeueReadyFrame() const;
         [[nodiscard]] Frame waitDequeueReadyFrame() const;
+        [[nodiscard]] std::optional<Frame> waitDequeueReadyFrame(
+            std::chrono::milliseconds timeout
+        ) const;
         [[nodiscard]] bool markFrameConsumed(FrameId frameId);
         [[nodiscard]] bool markFrameFailed(FrameId frameId);
 
