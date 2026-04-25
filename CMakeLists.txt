@@ -74,12 +74,14 @@ add_subdirectory(src/builder)
 add_subdirectory(src/capture)
 add_subdirectory(src/reconstruction)
 add_subdirectory(src/streaming)
+add_subdirectory(src/streaming/webrtc)
 
 target_link_libraries(EdgeVision PRIVATE config)
 target_link_libraries(EdgeVision PRIVATE capture)
 target_link_libraries(EdgeVision PRIVATE model)
 target_link_libraries(EdgeVision PRIVATE reconstruction)
 target_link_libraries(EdgeVision PRIVATE streaming)
+target_link_libraries(EdgeVision PRIVATE streaming_webrtc)
 
 # ---- Bundle ----
 # Creates a self-contained bundle without affecting normal build/install
