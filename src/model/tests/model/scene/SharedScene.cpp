@@ -88,13 +88,6 @@ namespace {
         return predicate();
     }
 
-    VoxelRegion makeRegion(int offset) {
-        return boundedVoxelRegion(
-            VoxelCoordinate{offset, offset + 1, offset + 2},
-            VoxelCoordinate{offset + 3, offset + 4, offset + 5}
-        );
-    }
-
     void expectBlockedReadGetsPriorityAheadOfWaitingWriter(SceneReadPolicy readPolicy) {
         SharedScene scene{readPolicy};
         std::promise<void> readerStarted{};
@@ -154,36 +147,6 @@ namespace {
         writer.join();
     }
 
-    void expectTryReadDoesNotCreatePriorityOverWaitingWriter(SceneReadPolicy readPolicy) {
-        SharedScene scene{readPolicy};
-        std::promise<void> writerStarted{};
-        std::future<void> writerStartedFuture = writerStarted.get_future();
-        std::atomic<bool> writerAcquired = false;
-        std::thread writer{};
-
-        {
-            auto initialWrite = scene.write();
-            writer = std::thread([&scene, &writerStarted, &writerAcquired]() {
-                writerStarted.set_value();
-                auto writeAccess = scene.write();
-                writerAcquired.store(true);
-            });
-
-            writerStartedFuture.wait();
-            expectTrue(!scene.tryRead().has_value(), "tryRead should fail during active write");
-            expectTrue(
-                !waitUntil([&writerAcquired]() { return writerAcquired.load(); }, 20ms),
-                "waiting writer should stay blocked until active write releases"
-            );
-        }
-
-        expectTrue(
-            waitUntil([&writerAcquired]() { return writerAcquired.load(); }),
-            "failed tryRead should not create read priority over a waiting writer"
-        );
-        writer.join();
-    }
-
     void testRepeatedSharedSceneConstructionReleasesScene() {
         for (int i = 0; i < 100; ++i) {
             auto scene = std::make_unique<SharedScene>();
@@ -193,42 +156,91 @@ namespace {
 
     void testReadAccessCanCoexist() {
         SharedScene scene{};
+        std::promise<void> writerStarted{};
+        std::future<void> started = writerStarted.get_future();
+        std::atomic<bool> writerAcquired = false;
+        std::thread writer{};
 
-        const auto firstRead = scene.tryRead();
-        expectTrue(firstRead.has_value(), "first read access should be granted");
+        {
+            auto firstRead = scene.read();
+            auto secondRead = scene.read();
 
-        const auto secondRead = scene.tryRead();
-        expectTrue(secondRead.has_value(), "second read access should be granted");
+            expectEq(firstRead.version(), SceneVersionId{0}, "first read should be granted");
+            expectEq(secondRead.version(), SceneVersionId{0}, "second read should be granted");
 
-        const auto writeAccess = scene.tryWrite();
-        expectTrue(!writeAccess.has_value(), "write access should wait for active readers");
+            writer = std::thread([&scene, &writerStarted, &writerAcquired]() {
+                writerStarted.set_value();
+                auto writeAccess = scene.write();
+                writerAcquired.store(true);
+            });
+
+            started.wait();
+            expectTrue(
+                !waitUntil([&writerAcquired]() { return writerAcquired.load(); }, 20ms),
+                "write access should wait for active readers"
+            );
+        }
+
+        expectTrue(
+            waitUntil([&writerAcquired]() { return writerAcquired.load(); }),
+            "writer should acquire after readers release"
+        );
+        writer.join();
     }
 
     void testWriteAccessIsExclusive() {
         SharedScene scene{};
-
-        const auto writeAccess = scene.tryWrite();
-        expectTrue(writeAccess.has_value(), "write access should be granted when scene is idle");
-
-        const auto readAccess = scene.tryRead();
-        expectTrue(!readAccess.has_value(), "read access should not overlap active write access");
-
-        const auto secondWrite = scene.tryWrite();
-        expectTrue(
-            !secondWrite.has_value(), "write access should not overlap active write access"
-        );
-    }
-
-    void testTryAccessSucceedsAfterConflictingHandleRelease() {
-        SharedScene scene{};
+        std::promise<void> readerStarted{};
+        std::promise<void> writerStarted{};
+        std::promise<void> releaseReader{};
+        std::future<void> readerStartedFuture = readerStarted.get_future();
+        std::future<void> writerStartedFuture = writerStarted.get_future();
+        std::shared_future<void> releaseReaderSignal = releaseReader.get_future().share();
+        std::atomic<bool> readerAcquired = false;
+        std::atomic<bool> writerAcquired = false;
+        std::thread reader{};
+        std::thread writer{};
 
         {
-            const auto writeAccess = scene.tryWrite();
-            expectTrue(writeAccess.has_value(), "write access should be granted");
+            auto initialWrite = scene.write();
+            reader =
+                std::thread([&scene, &readerStarted, &releaseReaderSignal, &readerAcquired]() {
+                    readerStarted.set_value();
+                    auto readAccess = scene.read();
+                    readerAcquired.store(true);
+                    releaseReaderSignal.wait();
+                });
+            writer = std::thread([&scene, &writerStarted, &writerAcquired]() {
+                writerStarted.set_value();
+                auto writeAccess = scene.write();
+                writerAcquired.store(true);
+            });
+
+            readerStartedFuture.wait();
+            writerStartedFuture.wait();
+            expectTrue(
+                !waitUntil([&readerAcquired]() { return readerAcquired.load(); }, 20ms),
+                "read access should not overlap active write access"
+            );
+            expectTrue(
+                !waitUntil([&writerAcquired]() { return writerAcquired.load(); }, 20ms),
+                "write access should not overlap active write access"
+            );
         }
 
-        const auto readAccess = scene.tryRead();
-        expectTrue(readAccess.has_value(), "read access should be granted after write release");
+        expectTrue(
+            waitUntil([&readerAcquired]() { return readerAcquired.load(); }),
+            "blocked read should acquire after active write releases"
+        );
+        expectTrue(!writerAcquired.load(), "waiting writer should remain blocked behind read");
+
+        releaseReader.set_value();
+        reader.join();
+        expectTrue(
+            waitUntil([&writerAcquired]() { return writerAcquired.load(); }),
+            "blocked writer should acquire after reader releases"
+        );
+        writer.join();
     }
 
     void testBlockingReadWaitsForWriteRelease() {
@@ -290,11 +302,6 @@ namespace {
     void testBlockedReadGetsPriorityAheadOfWaitingWriter() {
         expectBlockedReadGetsPriorityAheadOfWaitingWriter(SceneReadPolicy::Greedy);
         expectBlockedReadGetsPriorityAheadOfWaitingWriter(SceneReadPolicy::Balanced);
-    }
-
-    void testTryReadDoesNotCreatePriorityOverWaitingWriter() {
-        expectTryReadDoesNotCreatePriorityOverWaitingWriter(SceneReadPolicy::Greedy);
-        expectTryReadDoesNotCreatePriorityOverWaitingWriter(SceneReadPolicy::Balanced);
     }
 
     void testGreedyPolicyAllowsFreshReadersPastWaitingWriter() {
@@ -419,10 +426,14 @@ namespace {
         constexpr int readerCount = 8;
 
         std::promise<void> releaseReaders{};
+        std::promise<void> writerStarted{};
         std::shared_future<void> releaseSignal = releaseReaders.get_future().share();
+        std::future<void> writerStartedFuture = writerStarted.get_future();
         std::atomic<int> acquiredReaders = 0;
+        std::atomic<bool> writerAcquired = false;
         std::vector<std::thread> readers{};
         readers.reserve(readerCount);
+        std::thread writer{};
 
         for (int index = 0; index < readerCount; ++index) {
             readers.emplace_back([&scene, releaseSignal, &acquiredReaders]() {
@@ -436,71 +447,27 @@ namespace {
             waitUntil([&acquiredReaders]() { return acquiredReaders.load() == readerCount; }),
             "all concurrent readers should acquire access"
         );
-        expectTrue(!scene.tryWrite().has_value(), "writer should wait for all readers");
+        writer = std::thread([&scene, &writerStarted, &writerAcquired]() {
+            writerStarted.set_value();
+            auto writeAccess = scene.write();
+            writerAcquired.store(true);
+        });
+        writerStartedFuture.wait();
+        expectTrue(
+            !waitUntil([&writerAcquired]() { return writerAcquired.load(); }, 20ms),
+            "writer should wait for all readers"
+        );
 
         releaseReaders.set_value();
         for (std::thread& reader : readers) {
             reader.join();
         }
 
-        expectTrue(scene.tryWrite().has_value(), "writer should acquire after readers release");
-    }
-
-    void testReadChildKeepsParentLeaseAfterRootRelease() {
-        SharedScene scene{};
-        const VoxelRegion childRegion = makeRegion(1);
-
-        {
-            SceneReadAccess childAccess = [&scene, &childRegion]() {
-                auto rootAccess = scene.read();
-                return rootAccess.child(childRegion);
-            }();
-
-            expectEq(childAccess.version(), SceneVersionId{0}, "child should preserve version");
-            expectEq(childAccess.region(), childRegion, "child should expose requested region");
-            expectTrue(
-                !scene.tryWrite().has_value(), "read child should keep parent read lease alive"
-            );
-        }
-
-        expectTrue(scene.tryWrite().has_value(), "writer should acquire after child release");
-    }
-
-    void testWriteChildKeepsParentLeaseAfterRootRelease() {
-        SharedScene scene{};
-        const VoxelRegion childRegion = makeRegion(3);
-
-        {
-            SceneWriteAccess childAccess = [&scene, &childRegion]() {
-                auto rootAccess = scene.write();
-                return rootAccess.child(childRegion);
-            }();
-
-            expectEq(childAccess.version(), SceneVersionId{0}, "child should preserve version");
-            expectEq(childAccess.region(), childRegion, "child should expose requested region");
-            expectTrue(
-                !scene.tryRead().has_value(), "write child should keep parent write lease alive"
-            );
-        }
-
-        expectTrue(scene.tryRead().has_value(), "reader should acquire after child release");
-    }
-
-    void testNestedChildrenUseLatestRequestedRegion() {
-        SharedScene scene{};
-        const VoxelRegion firstRegion = makeRegion(5);
-        const VoxelRegion secondRegion = makeRegion(9);
-
-        auto rootAccess = scene.read();
-        SceneReadAccess firstChild = rootAccess.child(firstRegion);
-        SceneReadAccess secondChild = firstChild.child(secondRegion);
-
-        expectEq(rootAccess.region(), wholeSceneRegion(), "root access should cover whole scene");
-        expectEq(firstChild.region(), firstRegion, "first child should expose first region");
-        expectEq(secondChild.region(), secondRegion, "nested child should expose latest region");
-        expectEq(
-            secondChild.version(), rootAccess.version(), "nested child should preserve version"
+        expectTrue(
+            waitUntil([&writerAcquired]() { return writerAcquired.load(); }),
+            "writer should acquire after readers release"
         );
+        writer.join();
     }
 
     void testPublishRequiresOwningWriteAccess() {
@@ -524,6 +491,23 @@ namespace {
             SceneVersionId{0},
             "rejected foreign publish should not change foreign version"
         );
+
+        {
+            auto writeAccess = scene.write();
+            auto movedWriteAccess = std::move(writeAccess);
+            expectThrows<std::invalid_argument>(
+                [&scene, &writeAccess]() {
+                    [[maybe_unused]] const SceneVersionId ignoredVersion =
+                        scene.publish(writeAccess);
+                },
+                "publish should reject moved-from write access"
+            );
+            expectEq(
+                movedWriteAccess.version(),
+                SceneVersionId{0},
+                "valid moved-to write access should remain usable"
+            );
+        }
     }
 
     void testPublishUpdatesVersionForHandleAndFutureReaders() {
@@ -532,25 +516,12 @@ namespace {
 
         {
             auto writeAccess = scene.write();
-            SceneWriteAccess existingChildAccess = writeAccess.child(makeRegion(1));
             const SceneVersionId publishedVersion = scene.publish(writeAccess);
             expectEq(publishedVersion, SceneVersionId{1}, "publish should increment version");
             expectEq(
                 writeAccess.version(),
                 SceneVersionId{1},
                 "write handle should observe published version"
-            );
-            expectEq(
-                existingChildAccess.version(),
-                SceneVersionId{1},
-                "existing child should observe published version"
-            );
-
-            SceneWriteAccess childAccess = writeAccess.child(makeRegion(2));
-            expectEq(
-                childAccess.version(),
-                SceneVersionId{1},
-                "child created after publish should observe published version"
             );
         }
 
@@ -570,24 +541,15 @@ namespace {
 
         {
             auto readAccess = scene.read();
-            SceneReadAccess childAccess = readAccess.child(makeRegion(4));
             sceneAddress = &readAccess.scene();
-            expectTrue(
-                &readAccess.scene() == &childAccess.scene(),
-                "read root and child should expose same InfiniTAM scene"
-            );
+            expectTrue(sceneAddress != nullptr, "read access should expose scene");
         }
 
         {
             auto writeAccess = scene.write();
-            SceneWriteAccess childAccess = writeAccess.child(makeRegion(8));
             expectTrue(
                 sceneAddress == &writeAccess.scene(),
                 "read and write access should expose same central InfiniTAM scene"
-            );
-            expectTrue(
-                &writeAccess.scene() == &childAccess.scene(),
-                "write root and child should expose same InfiniTAM scene"
             );
         }
     }
@@ -610,10 +572,9 @@ namespace {
             );
             expectThrows<std::logic_error>(
                 [&readAccess]() {
-                    [[maybe_unused]] const SceneReadAccess ignoredChild =
-                        readAccess.child(makeRegion(1));
+                    [[maybe_unused]] const SceneVersionId ignoredVersion = readAccess.version();
                 },
-                "moved-from read access should reject child access"
+                "moved-from read access should reject version access"
             );
         }
 
@@ -633,10 +594,9 @@ namespace {
             );
             expectThrows<std::logic_error>(
                 [&writeAccess]() {
-                    [[maybe_unused]] const SceneWriteAccess ignoredChild =
-                        writeAccess.child(makeRegion(1));
+                    [[maybe_unused]] const SceneVersionId ignoredVersion = writeAccess.version();
                 },
-                "moved-from write access should reject child access"
+                "moved-from write access should reject version access"
             );
         }
     }
@@ -646,17 +606,12 @@ int main() {
     testRepeatedSharedSceneConstructionReleasesScene();
     testReadAccessCanCoexist();
     testWriteAccessIsExclusive();
-    testTryAccessSucceedsAfterConflictingHandleRelease();
     testBlockingReadWaitsForWriteRelease();
     testBlockingWriteWaitsForReadRelease();
     testBlockedReadGetsPriorityAheadOfWaitingWriter();
-    testTryReadDoesNotCreatePriorityOverWaitingWriter();
     testGreedyPolicyAllowsFreshReadersPastWaitingWriter();
     testBalancedPolicyBlocksFreshReadersBehindWaitingWriter();
     testManyReadersShareAccessAndBlockWriter();
-    testReadChildKeepsParentLeaseAfterRootRelease();
-    testWriteChildKeepsParentLeaseAfterRootRelease();
-    testNestedChildrenUseLatestRequestedRegion();
     testPublishRequiresOwningWriteAccess();
     testPublishUpdatesVersionForHandleAndFutureReaders();
     testInfiniTamSceneReferenceIsCentralAndStable();
