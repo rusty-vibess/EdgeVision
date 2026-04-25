@@ -49,6 +49,8 @@ namespace {
         EXPECT_EQ(result.config.render.port, 6688);
         EXPECT_EQ(result.config.render.readPolicy, ReadPolicy::Greedy);
         EXPECT_FALSE(result.config.capture.enabled);
+        EXPECT_EQ(result.config.builder.readyFrameTimeoutMs, 50);
+        EXPECT_TRUE(result.config.builder.trackerConfig.empty());
     }
 
     void testPortOverride() {
@@ -103,6 +105,8 @@ namespace {
         defaults.render.port = 9000;
         defaults.render.readPolicy = ReadPolicy::Balanced;
         defaults.capture.runtime.captureTimeoutMs = 25;
+        defaults.builder.readyFrameTimeoutMs = 7;
+        defaults.builder.trackerConfig = "type=forcefail";
 
         char executable[] = "EdgeVision";
         char captureFlag[] = "--enable-capture";
@@ -115,6 +119,8 @@ namespace {
         EXPECT_EQ(result.config.render.readPolicy, ReadPolicy::Balanced);
         EXPECT_TRUE(result.config.capture.enabled);
         EXPECT_EQ(result.config.capture.runtime.captureTimeoutMs, 25);
+        EXPECT_EQ(result.config.builder.readyFrameTimeoutMs, 7);
+        EXPECT_EQ(result.config.builder.trackerConfig, defaults.builder.trackerConfig);
     }
 
     void testInvalidPortFails() {
