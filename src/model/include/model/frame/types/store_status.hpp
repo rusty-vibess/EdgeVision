@@ -13,14 +13,14 @@ namespace edgevision::model::frame {
 
     struct FrameStoreConfig {
         std::size_t maxStoredFrames = 120;
-        std::size_t maxPendingFramePackets = 120;
+        std::size_t maxReadyFrames = 120;
     };
 
     struct FrameStoreStatus {
         std::size_t storedFrameCount = 0;
         std::size_t maxStoredFrames = 0;
-        std::size_t queuedPacketCount = 0;
-        std::size_t maxPendingFramePackets = 0;
+        std::size_t readyFrameCount = 0;
+        std::size_t maxReadyFrames = 0;
         std::size_t acceptedFrameCount = 0;
         std::size_t rejectedFrameCount = 0;
         std::size_t droppedFrameCount = 0;

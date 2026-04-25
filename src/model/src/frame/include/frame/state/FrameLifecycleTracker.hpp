@@ -10,12 +10,15 @@ namespace edgevision::model::frame {
 
     class FrameLifecycleTracker final {
       public:
-        void recordAcceptedQueued(FrameId frameId);
+        void recordAcceptedReady(FrameId frameId);
         void recordInvalid(FrameId frameId);
-        void markSent(FrameId frameId);
+        void markDispatched(FrameId frameId);
+        void markConsumed(FrameId frameId);
+        void markFailed(FrameId frameId);
         void markDropped(FrameId frameId);
 
-        [[nodiscard]] bool isPendingForFpga(FrameId frameId) const;
+        [[nodiscard]] bool isReadyForConsumer(FrameId frameId) const;
+        [[nodiscard]] bool isProtectedFromEviction(FrameId frameId) const;
         [[nodiscard]] std::optional<FrameLifecycle> get(FrameId frameId) const;
         [[nodiscard]] std::unordered_map<FrameId, FrameLifecycle> snapshot() const;
 

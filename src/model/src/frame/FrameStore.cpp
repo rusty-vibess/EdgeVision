@@ -1,12 +1,13 @@
 #include "model/frame/FrameStore.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <memory>
 #include <mutex>
 #include <string>
 #include <utility>
 
-#include "frame/queue/FramePacketQueue.hpp"
+#include "frame/queue/ReadyFrameQueue.hpp"
 #include "frame/state/FrameHistory.hpp"
 #include "frame/state/FrameLifecycleTracker.hpp"
 #include "frame/utils/FrameValidator.hpp"
@@ -28,9 +29,8 @@ namespace edgevision::model::frame {
           m_history(std::make_unique<FrameHistory>()),
           m_lifecycleTracker(std::make_unique<FrameLifecycleTracker>()) {
         m_config.maxStoredFrames = std::max<std::size_t>(1, m_config.maxStoredFrames);
-        m_config.maxPendingFramePackets =
-            std::max<std::size_t>(1, m_config.maxPendingFramePackets);
-        m_packetQueue = std::make_unique<FramePacketQueue>(m_config.maxPendingFramePackets);
+        m_config.maxReadyFrames = std::max<std::size_t>(1, m_config.maxReadyFrames);
+        m_readyFrameQueue = std::make_unique<ReadyFrameQueue>(m_config.maxReadyFrames);
     }
 
     FrameStore::~FrameStore() = default;
@@ -46,7 +46,7 @@ namespace edgevision::model::frame {
         validationContext.hasEvictableFrame =
             m_history
                 ->findOldestEvictable([this](FrameId frameId) {
-                    return !m_lifecycleTracker->isPendingForFpga(frameId);
+                    return !m_lifecycleTracker->isProtectedFromEviction(frameId);
                 })
                 .has_value();
         FrameSubmissionResult result = FrameValidator::validate(frame, validationContext);
@@ -55,19 +55,17 @@ namespace edgevision::model::frame {
             return result;
         }
 
-        // Enqueue valid Frame as FramePacket
-        const FramePacket packet = frame;
-        if (!m_packetQueue->tryEnqueue(packet)) {
+        if (!m_readyFrameQueue->tryEnqueue(frame)) {
             result = makeResult(
-                FrameSubmissionCode::PacketQueueFull,
+                FrameSubmissionCode::ReadyFrameQueueFull,
                 frame.frameId,
-                "Pending frame packet queue is full"
+                "Ready frame queue is full"
             );
             recordRejectedFrameLocked(frame, result);
             return result;
         }
 
-        m_lifecycleTracker->recordAcceptedQueued(frame.frameId);
+        m_lifecycleTracker->recordAcceptedReady(frame.frameId);
         m_history->add(std::move(frame));
         ++m_acceptedFrameCount;
 
@@ -91,22 +89,58 @@ namespace edgevision::model::frame {
         return m_history->recent(count);
     }
 
-    std::optional<FramePacket> FrameStore::getNextFramePacket() const {
-        return m_packetQueue->tryDequeue();
+    std::optional<Frame> FrameStore::tryDequeueReadyFrame() const {
+        std::optional<Frame> frame = m_readyFrameQueue->tryDequeue();
+        if (!frame.has_value()) {
+            return std::nullopt;
+        }
+
+        std::unique_lock lock(m_mutex);
+        m_lifecycleTracker->markDispatched(frame->frameId);
+        return frame;
     }
 
-    FramePacket FrameStore::waitForNextFramePacket() const {
-        return m_packetQueue->waitDequeue();
+    Frame FrameStore::waitDequeueReadyFrame() const {
+        Frame frame = m_readyFrameQueue->waitDequeue();
+
+        std::unique_lock lock(m_mutex);
+        m_lifecycleTracker->markDispatched(frame.frameId);
+        return frame;
     }
 
-    bool FrameStore::markFramePacketSent(FrameId frameId) {
+    std::optional<Frame> FrameStore::waitDequeueReadyFrame(
+        std::chrono::milliseconds timeout
+    ) const {
+        std::optional<Frame> frame = m_readyFrameQueue->waitDequeue(timeout);
+        if (!frame.has_value()) {
+            return std::nullopt;
+        }
+
+        std::unique_lock lock(m_mutex);
+        m_lifecycleTracker->markDispatched(frame->frameId);
+        return frame;
+    }
+
+    bool FrameStore::markFrameConsumed(FrameId frameId) {
         std::unique_lock lock(m_mutex);
 
-        if (!m_packetQueue->markSent(frameId)) {
+        if (!m_readyFrameQueue->markCompleted(frameId)) {
             return false;
         }
 
-        m_lifecycleTracker->markSent(frameId);
+        m_lifecycleTracker->markConsumed(frameId);
+        evictOldFramesLocked();
+        return true;
+    }
+
+    bool FrameStore::markFrameFailed(FrameId frameId) {
+        std::unique_lock lock(m_mutex);
+
+        if (!m_readyFrameQueue->markCompleted(frameId)) {
+            return false;
+        }
+
+        m_lifecycleTracker->markFailed(frameId);
         evictOldFramesLocked();
         return true;
     }
@@ -117,8 +151,8 @@ namespace edgevision::model::frame {
         FrameStoreStatus status{};
         status.storedFrameCount = m_history->size();
         status.maxStoredFrames = m_config.maxStoredFrames;
-        status.queuedPacketCount = m_packetQueue->sizeApprox();
-        status.maxPendingFramePackets = m_config.maxPendingFramePackets;
+        status.readyFrameCount = m_readyFrameQueue->sizeApprox();
+        status.maxReadyFrames = m_config.maxReadyFrames;
         status.acceptedFrameCount = m_acceptedFrameCount;
         status.rejectedFrameCount = m_rejectedFrameCount;
         status.droppedFrameCount = m_droppedFrameCount;
@@ -142,7 +176,7 @@ namespace edgevision::model::frame {
             const std::optional<FrameId> frameId =
                 m_history->findOldestEvictable([this, latestFrameId](FrameId candidateFrameId) {
                     return (!latestFrameId.has_value() || candidateFrameId != *latestFrameId)
-                        && !m_lifecycleTracker->isPendingForFpga(candidateFrameId);
+                        && !m_lifecycleTracker->isProtectedFromEviction(candidateFrameId);
                 });
 
             if (!frameId.has_value()) {

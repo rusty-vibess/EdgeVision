@@ -64,12 +64,13 @@ endif()
 
 add_executable(EdgeVision src/main.cpp)
 # third_party deps install
-list(APPEND CMAKE_PREFIX_PATH "/opt/jetson-sysroot-overlay/install")
+list(APPEND CMAKE_PREFIX_PATH "${SYSROOT_OVERLAY}/install")
 # Torch being lower in the superbuild caused strange issues hence find_package here
 find_package(Torch CONFIG REQUIRED)
 
 add_subdirectory(src/config)
 add_subdirectory(src/model)
+add_subdirectory(src/builder)
 add_subdirectory(src/capture)
 add_subdirectory(src/reconstruction)
 add_subdirectory(src/streaming)
