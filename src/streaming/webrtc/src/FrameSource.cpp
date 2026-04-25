@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstring>
+#include <utility>
 
 // `SharedScene` is referenced only via reference (`m_scene`). The full
 // definition is expected to land in `model/scene/SharedScene.hpp` on a
