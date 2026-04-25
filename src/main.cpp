@@ -13,6 +13,8 @@
 #include "model/frame/FrameStore.hpp"
 #include "reconstruction/TorchGaussianResidualModel.hpp"
 #include "streaming/RenderServer.hpp"
+#include "streaming/webrtc/WebRtcServer.hpp"
+#include "streaming/webrtc/types/StreamConfig.hpp"
 #include "types/HybridTypes.hpp"
 
 /// Usage:  ./EdgeVision [--port 6688] [--enable-capture] [--read-policy greedy|balanced]
@@ -60,6 +62,20 @@ int main(int argc, char* argv[]) {
                      "Frames will be empty."
                   << std::endl;
     }
+
+    edgevision::streaming::webrtc::StreamConfig wrtcCfg;
+    wrtcCfg.signallingPort = 6689;
+    wrtcCfg.width = 854;
+    wrtcCfg.height = 480;
+    wrtcCfg.fps = 30;
+    wrtcCfg.bitrateBps = 1500000;
+    // SharedScene is owned by the model module; if not yet exposed in
+    // appConfig, instantiate one here. Adjust to wherever the scene
+    // ends up living on origin/main.
+    edgevision::model::scene::SharedScene sharedScene;
+    auto webrtcServer = edgevision::streaming::webrtc::startWebRtcServer(
+        wrtcCfg, frameStore, sharedScene
+    );
 
     auto renderThread = startRenderServer(
         appConfig.render.port,
