@@ -21,6 +21,10 @@ if(NOT IS_MULTI_CONFIG AND NOT CMAKE_BUILD_TYPE)
     message(STATUS "Defaulting CMAKE_BUILD_TYPE to Debug")
 endif()
 
+if(COMPILE_WITHOUT_CUDA)
+    message(FATAL_ERROR "EdgeVision Requires CUDA")
+endif()
+
 # ---- Sanitizers ----
 set(SANITIZE_FLAGS "-fsanitize=address,undefined -fno-omit-frame-pointer")
 
