@@ -166,7 +166,7 @@ cmake -S . \
   -DCMAKE_BUILD_TYPE=RelWithDebInfo \
   -DENABLE_TESTS=ON \
   -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-&& cmake --build build-relwithdebinfo-tests -j2
+&& cmake --build build-relwithdebinfo-tests -j3
 ```
 
 If you still want the `Debug` sanitizer coverage, the `Debug` bundle includes `cmake/suppressions`. From the bundle root you can rerun tests with the CUDA suppression file:
@@ -348,7 +348,7 @@ cmake -S . \
   -G Ninja \
   -DCMAKE_TOOLCHAIN_FILE=/workspaces/repo/toolchains/jetson/jetson-aarch64.cmake \
   -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-  && cmake --build build -j2
+&& cmake --build build -j3
 
 # Configure + build RelWithDebInfo
 cmake -S . \
@@ -358,7 +358,7 @@ cmake -S . \
   -DCMAKE_BUILD_TYPE=RelWithDebInfo \
   -DENABLE_TESTS=OFF \
   -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-&& cmake --build build-relwithdebinfo -j2 --target bundle
+&& cmake --build build-relwithdebinfo -j3 --target bundle
 
 # Individual build commands
 cmake --build /workspaces/repo/toolchain-tests/build

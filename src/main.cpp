@@ -1,14 +1,12 @@
 #include <algorithm>
 #include <chrono>
 #include <iostream>
-#include <memory>
 
 #include "app/runtime/ViewerFrameDumper.hpp"
 #include "app/runtime/ViewerPoseSeeder.hpp"
 #include "builder/SceneBuilderRunner.hpp"
 #include "capture/camera/CameraCapture.hpp"
 #include "capture/config/K4aConfig.hpp"
-#include "capture/frame/FrameIngestor.hpp"
 #include "capture/frame/FrameIngestorRunner.hpp"
 #include "config/CommandLineParser.hpp"
 #include "model/frame/FrameStore.hpp"
@@ -16,8 +14,7 @@
 #include "model/scene/SharedScene.hpp"
 #include "model/viewer/RenderOutputStore.hpp"
 #include "model/viewer/ViewerPoseStore.hpp"
-#include "viewer/SceneViewer.hpp"
-#include "viewer/ViewerRunner.hpp"
+#include "viewer/SceneViewerRunner.hpp"
 
 namespace {
     using namespace std::chrono_literals;
@@ -42,6 +39,8 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    // Import types
+    edgevision::capture::CameraCapture camera{};
     edgevision::model::frame::FrameStore frameStore{};
     edgevision::model::scene::SharedScene sharedScene{appConfig.scene};
     edgevision::model::scene::SceneVersionStore sceneVersionStore{};
@@ -53,15 +52,16 @@ int main(int argc, char* argv[]) {
     );
     edgevision::model::viewer::RenderOutputStore renderOutputStore{renderOutputHistoryCapacity};
 
-    edgevision::capture::CameraCapture camera{};
-    std::unique_ptr<edgevision::capture::frame::FrameIngestor> frameIngestor{};
-    std::unique_ptr<edgevision::capture::frame::FrameIngestorRunner> frameIngestorRunner{};
-
+    // Loop runners
+    edgevision::capture::frame::FrameIngestorRunner frameIngestorRunner(
+        camera, frameStore, appConfig.capture.runtime
+    );
     edgevision::builder::SceneBuilderRunner sceneBuilderRunner(
         frameStore, sharedScene, sceneVersionStore, appConfig.builder
     );
-    edgevision::viewer::SceneViewer sceneViewer(viewerPoseStore, sharedScene, renderOutputStore);
-    edgevision::viewer::ViewerRunner viewerRunner(sceneViewer, viewerPoseStore, appConfig.viewer);
+    edgevision::viewer::SceneViewerRunner sceneViewerRunner(
+        viewerPoseStore, sharedScene, renderOutputStore, appConfig.viewer
+    );
     edgevision::app::runtime::ViewerPoseSeeder viewerPoseSeeder(
         frameStore, sceneVersionStore, viewerPoseStore
     );
@@ -69,16 +69,15 @@ int main(int argc, char* argv[]) {
         renderOutputStore, appConfig.debug.viewerDump
     );
 
+    // Cleanup inline util
     const auto cleanup = [&]() {
-        viewerRunner.requestStop();
-        viewerRunner.join();
+        sceneViewerRunner.requestStop();
+        sceneViewerRunner.join();
         sceneBuilderRunner.requestStop();
         sceneBuilderRunner.join();
 
-        if (frameIngestorRunner) {
-            frameIngestorRunner->requestStop();
-            frameIngestorRunner->join();
-        }
+        frameIngestorRunner.requestStop();
+        frameIngestorRunner.join();
 
         if (camera.isStarted()) {
             camera.stop();
@@ -89,6 +88,7 @@ int main(int argc, char* argv[]) {
         }
     };
 
+    // Starts runners and sublibs with their relevant failures
     if (!camera.open(appConfig.capture.camera.deviceIndex)) {
         std::cerr << "Failed to open K4A device" << std::endl;
         return 1;
@@ -102,12 +102,7 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    frameIngestor =
-        std::make_unique<edgevision::capture::frame::FrameIngestor>(camera, frameStore);
-    frameIngestorRunner = std::make_unique<edgevision::capture::frame::FrameIngestorRunner>(
-        *frameIngestor, appConfig.capture.runtime
-    );
-    if (!frameIngestorRunner->start()) {
+    if (!frameIngestorRunner.start()) {
         std::cerr << "Failed to start capture frame ingestor" << std::endl;
         cleanup();
         return 1;
@@ -119,24 +114,27 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    if (!viewerRunner.start()) {
-        std::cerr << "Failed to start viewer runner" << std::endl;
+    if (!sceneViewerRunner.start()) {
+        std::cerr << "Failed to start scene viewer runner" << std::endl;
         cleanup();
         return 1;
     }
 
+    // Seed viewer pose to camera origin
     if (!viewerPoseSeeder.seedOnce(kViewerSeedTimeout)) {
         std::cerr << "Timed out waiting to seed the initial viewer pose" << std::endl;
         cleanup();
         return 1;
     }
 
+    // Debug mode: Exist until we hit timeout, dump frames
     if (!viewerFrameDumper.waitForConfiguredOutputs(kViewerOutputTimeout)) {
         std::cerr << "Timed out waiting for viewer render outputs" << std::endl;
         cleanup();
         return 1;
     }
 
+    // Debug mode: Inform on dump
     if (viewerFrameDumper.dumpingEnabled()) {
         std::cout << "Dumped " << viewerFrameDumper.dumpedFreshOutputCount()
                   << " viewer frame(s) to " << viewerFrameDumper.outputDirectory() << std::endl;
@@ -144,6 +142,7 @@ int main(int argc, char* argv[]) {
         std::cout << "Observed first fresh viewer render output" << std::endl;
     }
 
+    // Die
     cleanup();
 
     return 0;

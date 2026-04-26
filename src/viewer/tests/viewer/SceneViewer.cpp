@@ -1,4 +1,4 @@
-#include "viewer/SceneViewer.hpp"
+#include "viewer/state/SceneViewer.hpp"
 
 #include <iostream>
 #include <optional>
@@ -9,7 +9,6 @@
 #include "model/scene/SceneVersionStore.hpp"
 #include "model/scene/SharedScene.hpp"
 #include "model/viewer/RenderOutputStore.hpp"
-#include "model/viewer/ViewerPoseStore.hpp"
 #include "test_scene.hpp"
 
 namespace {
@@ -50,7 +49,7 @@ namespace {
         }
     }
 
-    void testRenderLatestPosePublishesRgbOutput() {
+    void testRenderPosePublishesRgbOutput() {
         SharedScene sharedScene{edgevision::config::SceneReadPolicy::Balanced};
         SceneVersionStore sceneVersionStore{};
         const std::optional<PopulatedSceneData> data =
@@ -60,15 +59,14 @@ namespace {
             return;
         }
 
-        ViewerPoseStore viewerPoseStore{};
         RenderOutputStore renderOutputStore(4);
-        SceneViewer viewer(viewerPoseStore, sharedScene, renderOutputStore);
+        SceneViewer viewer(sharedScene, renderOutputStore);
 
-        const ViewerPose viewerPose = viewerPoseStore.update(makeViewerPose(*data, 3));
-        const std::optional<RenderOutput> renderOutput = viewer.renderLatestPose();
+        const ViewerPose viewerPose = makeViewerPose(*data, 3);
+        const std::optional<RenderOutput> renderOutput = viewer.renderPose(viewerPose);
 
         expectTrue(
-            renderOutput.has_value(), "renderLatestPose should produce output for a stored pose"
+            renderOutput.has_value(), "renderPose should produce output for a valid viewer pose"
         );
         if (!renderOutput.has_value()) {
             return;
@@ -118,15 +116,13 @@ namespace {
             return;
         }
 
-        ViewerPoseStore viewerPoseStore{};
         RenderOutputStore renderOutputStore(4);
-        SceneViewer viewer(viewerPoseStore, sharedScene, renderOutputStore);
+        SceneViewer viewer(sharedScene, renderOutputStore);
 
-        [[maybe_unused]] const ViewerPose viewerPose =
-            viewerPoseStore.update(makeViewerPose(*data, 5));
-        expectTrue(viewer.renderLatestPose().has_value(), "first render should succeed");
+        const ViewerPose viewerPose = makeViewerPose(*data, 5);
+        expectTrue(viewer.renderPose(viewerPose).has_value(), "first render should succeed");
 
-        const std::optional<RenderOutput> repeatedOutput = viewer.renderLatestPose();
+        const std::optional<RenderOutput> repeatedOutput = viewer.renderPose(viewerPose);
         expectTrue(repeatedOutput.has_value(), "repeat render should still produce output");
         expectTrue(
             repeatedOutput.has_value() && repeatedOutput->stale,
@@ -139,7 +135,7 @@ namespace {
 } // namespace
 
 int main() {
-    testRenderLatestPosePublishesRgbOutput();
+    testRenderPosePublishesRgbOutput();
     testRepeatedRenderOfUnchangedInputsMarksOutputStale();
 
     if (gFailures != 0) {

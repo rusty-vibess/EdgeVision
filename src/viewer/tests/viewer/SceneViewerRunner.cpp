@@ -1,4 +1,4 @@
-#include "viewer/ViewerRunner.hpp"
+#include "viewer/SceneViewerRunner.hpp"
 
 #include <chrono>
 #include <cstddef>
@@ -14,7 +14,6 @@
 #include "model/viewer/RenderOutputStore.hpp"
 #include "model/viewer/ViewerPoseStore.hpp"
 #include "test_scene.hpp"
-#include "viewer/SceneViewer.hpp"
 
 namespace {
     using namespace edgevision::model::scene;
@@ -76,7 +75,6 @@ namespace {
         SceneVersionStore sceneVersionStore{};
         ViewerPoseStore viewerPoseStore{};
         RenderOutputStore renderOutputStore{8};
-        SceneViewer viewer{viewerPoseStore, sharedScene, renderOutputStore};
     };
 
     edgevision::config::ViewerRuntimeConfig makePoseDrivenConfig() {
@@ -95,11 +93,16 @@ namespace {
 
     void testJoinBeforeStartIsNoop() {
         ViewerFixture fixture{};
-        ViewerRunner runner(fixture.viewer, fixture.viewerPoseStore, makePoseDrivenConfig());
+        SceneViewerRunner runner(
+            fixture.viewerPoseStore,
+            fixture.sharedScene,
+            fixture.renderOutputStore,
+            makePoseDrivenConfig()
+        );
 
         runner.join();
 
-        const ViewerRunnerStatus status = runner.status();
+        const SceneViewerRunnerStatus status = runner.status();
         expectTrue(!runner.running(), "runner should not be running before start");
         expectTrue(!status.running, "status should report not running before start");
         expectEq(status.renderAttemptCount, std::size_t{0}, "join before start should be a no-op");
@@ -114,12 +117,17 @@ namespace {
             return;
         }
 
-        ViewerRunner runner(fixture.viewer, fixture.viewerPoseStore, makePoseDrivenConfig());
+        SceneViewerRunner runner(
+            fixture.viewerPoseStore,
+            fixture.sharedScene,
+            fixture.renderOutputStore,
+            makePoseDrivenConfig()
+        );
         expectTrue(runner.start(), "runner should start");
         expectTrue(
             waitUntil([&runner]() {
-                const ViewerRunnerStatus status = runner.status();
-                return status.activity == ViewerRunnerActivity::WaitingForPose
+                const SceneViewerRunnerStatus status = runner.status();
+                return status.activity == SceneViewerRunnerActivity::WaitingForPose
                     && status.idleIterationCount > 0;
             }),
             "pose-driven runner should wait when no pose is available"
@@ -139,7 +147,7 @@ namespace {
         runner.requestStop();
         runner.join();
 
-        const ViewerRunnerStatus status = runner.status();
+        const SceneViewerRunnerStatus status = runner.status();
         expectTrue(!runner.running(), "runner should stop after join");
         expectTrue(!status.running, "status should report not running after join");
         expectTrue(status.stopRequested, "status should record stop requests");
@@ -164,12 +172,17 @@ namespace {
             return;
         }
 
-        ViewerRunner runner(fixture.viewer, fixture.viewerPoseStore, makeLiveLoopConfig());
+        SceneViewerRunner runner(
+            fixture.viewerPoseStore,
+            fixture.sharedScene,
+            fixture.renderOutputStore,
+            makeLiveLoopConfig()
+        );
         expectTrue(runner.start(), "runner should start");
         expectTrue(
             waitUntil([&runner]() {
-                const ViewerRunnerStatus status = runner.status();
-                return status.activity == ViewerRunnerActivity::Idle
+                const SceneViewerRunnerStatus status = runner.status();
+                return status.activity == SceneViewerRunnerActivity::Idle
                     && status.idleIterationCount > 0;
             }),
             "live-loop runner should report idle activity before any pose is published"
@@ -184,14 +197,14 @@ namespace {
         runner.requestStop();
         runner.join();
 
-        const ViewerRunnerStatus status = runner.status();
+        const SceneViewerRunnerStatus status = runner.status();
         expectEq(
             status.lastPoseGeneration,
             std::optional<ViewerPoseGeneration>{viewerPose.generation},
             "live-loop runner should record the latest pose generation"
         );
         expectTrue(
-            status.activity == ViewerRunnerActivity::RenderedOutput,
+            status.activity == SceneViewerRunnerActivity::RenderedOutput,
             "live-loop runner should report rendered activity after publishing outputs"
         );
         expectTrue(

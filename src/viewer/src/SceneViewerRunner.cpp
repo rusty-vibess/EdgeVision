@@ -1,12 +1,13 @@
-#include "viewer/ViewerRunner.hpp"
+#include "viewer/SceneViewerRunner.hpp"
 
 #include <algorithm>
 #include <chrono>
+#include <memory>
 #include <optional>
 #include <thread>
 
 #include "model/viewer/ViewerPoseStore.hpp"
-#include "viewer/SceneViewer.hpp"
+#include "viewer/state/SceneViewer.hpp"
 
 namespace edgevision::viewer {
     namespace {
@@ -17,51 +18,54 @@ namespace edgevision::viewer {
         }
     } // namespace
 
-    ViewerRunner::ViewerRunner(
-        SceneViewer& viewer,
+    SceneViewerRunner::SceneViewerRunner(
         edgevision::model::viewer::ViewerPoseStore& viewerPoseStore,
+        edgevision::model::scene::SharedScene& sharedScene,
+        edgevision::model::viewer::RenderOutputStore& renderOutputStore,
         const edgevision::config::ViewerRuntimeConfig& config
     )
-        : m_viewer(viewer), m_viewerPoseStore(viewerPoseStore), m_config(config) {}
+        : m_viewerPoseStore(viewerPoseStore),
+          m_viewer(std::make_unique<SceneViewer>(sharedScene, renderOutputStore)),
+          m_config(config) {}
 
-    ViewerRunner::~ViewerRunner() {
+    SceneViewerRunner::~SceneViewerRunner() {
         requestStop();
         join();
     }
 
-    bool ViewerRunner::start() {
+    bool SceneViewerRunner::start() {
         if (m_thread.joinable() || m_running.load()) {
             return false;
         }
 
         m_stopRequested.store(false);
         setRunning(true);
-        m_thread = std::thread(&ViewerRunner::runLoop, this);
+        m_thread = std::thread(&SceneViewerRunner::runLoop, this);
         return true;
     }
 
-    void ViewerRunner::requestStop() {
+    void SceneViewerRunner::requestStop() {
         m_stopRequested.store(true);
         std::lock_guard<std::mutex> lock(m_statusMutex);
         m_status.stopRequested = true;
     }
 
-    void ViewerRunner::join() {
+    void SceneViewerRunner::join() {
         if (m_thread.joinable()) {
             m_thread.join();
         }
     }
 
-    bool ViewerRunner::running() const {
+    bool SceneViewerRunner::running() const {
         return m_running.load();
     }
 
-    ViewerRunnerStatus ViewerRunner::status() const {
+    SceneViewerRunnerStatus SceneViewerRunner::status() const {
         std::lock_guard<std::mutex> lock(m_statusMutex);
         return m_status;
     }
 
-    void ViewerRunner::runLoop() {
+    void SceneViewerRunner::runLoop() {
         const std::chrono::milliseconds loopPeriod = makeLoopPeriod(m_config);
         edgevision::model::viewer::ViewerPoseGeneration lastPoseGeneration = 0;
 
@@ -70,15 +74,15 @@ namespace edgevision::viewer {
                 const std::optional<edgevision::model::viewer::ViewerPose> viewerPose =
                     m_viewerPoseStore.waitForNewer(lastPoseGeneration, loopPeriod);
                 if (!viewerPose.has_value()) {
-                    recordIdle(ViewerRunnerActivity::WaitingForPose);
+                    recordIdle(SceneViewerRunnerActivity::WaitingForPose);
                     continue;
                 }
 
                 recordRenderAttempt(*viewerPose);
                 const std::optional<edgevision::model::viewer::RenderOutput> output =
-                    m_viewer.renderPose(*viewerPose);
+                    m_viewer->renderPose(*viewerPose);
                 if (!output.has_value()) {
-                    recordIdle(ViewerRunnerActivity::WaitingForPose);
+                    recordIdle(SceneViewerRunnerActivity::WaitingForPose);
                     continue;
                 }
 
@@ -91,13 +95,13 @@ namespace edgevision::viewer {
             const std::optional<edgevision::model::viewer::ViewerPose> viewerPose =
                 m_viewerPoseStore.latest();
             if (!viewerPose.has_value()) {
-                recordIdle(ViewerRunnerActivity::Idle);
+                recordIdle(SceneViewerRunnerActivity::Idle);
             } else {
                 recordRenderAttempt(*viewerPose);
                 const std::optional<edgevision::model::viewer::RenderOutput> output =
-                    m_viewer.renderPose(*viewerPose);
+                    m_viewer->renderPose(*viewerPose);
                 if (!output.has_value()) {
-                    recordIdle(ViewerRunnerActivity::Idle);
+                    recordIdle(SceneViewerRunnerActivity::Idle);
                 } else {
                     lastPoseGeneration = output->poseGeneration;
                     recordOutput(*output);
@@ -115,13 +119,13 @@ namespace edgevision::viewer {
         setRunning(false);
     }
 
-    void ViewerRunner::recordIdle(ViewerRunnerActivity activity) {
+    void SceneViewerRunner::recordIdle(SceneViewerRunnerActivity activity) {
         std::lock_guard<std::mutex> lock(m_statusMutex);
         ++m_status.idleIterationCount;
         m_status.activity = activity;
     }
 
-    void ViewerRunner::recordRenderAttempt(
+    void SceneViewerRunner::recordRenderAttempt(
         const edgevision::model::viewer::ViewerPose& viewerPose
     ) {
         std::lock_guard<std::mutex> lock(m_statusMutex);
@@ -129,20 +133,20 @@ namespace edgevision::viewer {
         m_status.lastPoseGeneration = viewerPose.generation;
     }
 
-    void ViewerRunner::recordOutput(const edgevision::model::viewer::RenderOutput& output) {
+    void SceneViewerRunner::recordOutput(const edgevision::model::viewer::RenderOutput& output) {
         std::lock_guard<std::mutex> lock(m_statusMutex);
         ++m_status.publishedOutputCount;
         if (output.stale) {
             ++m_status.staleOutputCount;
         }
 
-        m_status.activity = ViewerRunnerActivity::RenderedOutput;
+        m_status.activity = SceneViewerRunnerActivity::RenderedOutput;
         m_status.lastPoseGeneration = output.poseGeneration;
         m_status.lastSceneVersionId = output.sceneVersionId;
         m_status.lastOutputWasStale = output.stale;
     }
 
-    void ViewerRunner::setRunning(bool running) {
+    void SceneViewerRunner::setRunning(bool running) {
         m_running.store(running);
         std::lock_guard<std::mutex> lock(m_statusMutex);
         m_status.running = running;

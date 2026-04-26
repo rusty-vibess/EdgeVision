@@ -3,7 +3,7 @@ find_package(infinitam CONFIG REQUIRED)
 add_library(viewer)
 target_sources(viewer PRIVATE
     src/SceneViewer.cpp
-    src/ViewerRunner.cpp
+    src/SceneViewerRunner.cpp
     src/state/InfiniTamViewerPipeline.cpp
 )
 
