@@ -15,6 +15,7 @@
 #include <vector>
 
 namespace {
+    using edgevision::config::SceneReadPolicy;
     using namespace edgevision::model::scene;
     using namespace std::chrono_literals;
 

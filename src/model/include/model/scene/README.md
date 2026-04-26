@@ -57,6 +57,7 @@ Public scene API lives in this directory.
 ## Other Notes
 
 - Access wrappers contain no synchronization logic.
+- `SharedScene` read scheduling is configured at construction time via `config::SceneConfig`.
 - `publish()` is the explicit commit point for written scene state.
 - Readers observe the latest committed scene state.
 

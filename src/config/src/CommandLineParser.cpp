@@ -24,18 +24,31 @@ namespace edgevision::config {
             return true;
         }
 
-        [[nodiscard]] bool parseReadPolicy(std::string_view value, ReadPolicy& readPolicy) {
+        [[nodiscard]] bool parseReadPolicy(std::string_view value, SceneReadPolicy& readPolicy) {
             if (value == "greedy") {
-                readPolicy = ReadPolicy::Greedy;
+                readPolicy = SceneReadPolicy::Greedy;
                 return true;
             }
 
             if (value == "balanced") {
-                readPolicy = ReadPolicy::Balanced;
+                readPolicy = SceneReadPolicy::Balanced;
                 return true;
             }
 
             return false;
+        }
+
+        [[nodiscard]] bool parsePositiveCount(std::string_view value, std::size_t& count) {
+            const char* begin = value.data();
+            const char* end = begin + value.size();
+            std::size_t parsedCount = 0;
+            const std::from_chars_result result = std::from_chars(begin, end, parsedCount);
+            if (result.ec != std::errc{} || result.ptr != end || parsedCount == 0) {
+                return false;
+            }
+
+            count = parsedCount;
+            return true;
         }
 
     } // namespace
@@ -68,7 +81,7 @@ namespace edgevision::config {
                     return result;
                 }
 
-                result.config.render.port = port;
+                result.config.streaming.port = port;
                 ++i;
                 continue;
             }
@@ -79,13 +92,31 @@ namespace edgevision::config {
                     return result;
                 }
 
-                ReadPolicy readPolicy = result.config.render.readPolicy;
+                SceneReadPolicy readPolicy = result.config.scene.readPolicy;
                 if (!parseReadPolicy(argv[i + 1], readPolicy)) {
                     result.error = "Invalid read policy: " + std::string(argv[i + 1]);
                     return result;
                 }
 
-                result.config.render.readPolicy = readPolicy;
+                result.config.scene.readPolicy = readPolicy;
+                ++i;
+                continue;
+            }
+
+            if (arg == "--dump-viewer-frames") {
+                if (i + 1 >= argc) {
+                    result.error = "Missing value for --dump-viewer-frames";
+                    return result;
+                }
+
+                std::size_t frameCount = 0;
+                if (!parsePositiveCount(argv[i + 1], frameCount)) {
+                    result.error = "Invalid viewer dump frame count: " + std::string(argv[i + 1]);
+                    return result;
+                }
+
+                result.config.debug.viewerDump.enabled = true;
+                result.config.debug.viewerDump.maxFreshOutputs = frameCount;
                 ++i;
                 continue;
             }

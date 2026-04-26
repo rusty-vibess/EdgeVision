@@ -72,7 +72,7 @@ namespace {
     }
 
     struct ViewerFixture {
-        SharedScene sharedScene{SceneReadPolicy::Balanced};
+        SharedScene sharedScene{edgevision::config::SceneReadPolicy::Balanced};
         SceneVersionStore sceneVersionStore{};
         ViewerPoseStore viewerPoseStore{};
         RenderOutputStore renderOutputStore{8};

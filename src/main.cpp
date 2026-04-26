@@ -1,21 +1,34 @@
-#include <cstddef>
-#include <cstdint>
-#include <cstring>
+#include <algorithm>
+#include <chrono>
 #include <iostream>
 #include <memory>
-#include <vector>
 
+#include "app/runtime/ViewerFrameDumper.hpp"
+#include "app/runtime/ViewerPoseSeeder.hpp"
+#include "builder/SceneBuilderRunner.hpp"
 #include "capture/camera/CameraCapture.hpp"
 #include "capture/config/K4aConfig.hpp"
 #include "capture/frame/FrameIngestor.hpp"
 #include "capture/frame/FrameIngestorRunner.hpp"
 #include "config/CommandLineParser.hpp"
 #include "model/frame/FrameStore.hpp"
-#include "reconstruction/TorchGaussianResidualModel.hpp"
-#include "streaming/RenderServer.hpp"
-#include "types/HybridTypes.hpp"
+#include "model/scene/SceneVersionStore.hpp"
+#include "model/scene/SharedScene.hpp"
+#include "model/viewer/RenderOutputStore.hpp"
+#include "model/viewer/ViewerPoseStore.hpp"
+#include "viewer/SceneViewer.hpp"
+#include "viewer/ViewerRunner.hpp"
 
-/// Usage:  ./EdgeVision [--port 6688] [--enable-capture] [--read-policy greedy|balanced]
+namespace {
+    using namespace std::chrono_literals;
+
+    constexpr auto kViewerSeedTimeout = 30s;
+    constexpr auto kViewerOutputTimeout = 30s;
+} // namespace
+
+/// Usage: ./EdgeVision [--port 6688] [--enable-capture]
+///                      [--read-policy greedy|balanced]
+///                      [--dump-viewer-frames N]
 int main(int argc, char* argv[]) {
     const auto parseResult = edgevision::config::parseCommandLine(argc, argv);
     if (!parseResult.parsed()) {
@@ -24,98 +37,114 @@ int main(int argc, char* argv[]) {
     }
 
     const edgevision::config::AppConfig appConfig = parseResult.config;
+    if (!appConfig.capture.enabled) {
+        std::cerr << "Viewer smoke test requires --enable-capture" << std::endl;
+        return 1;
+    }
 
     edgevision::model::frame::FrameStore frameStore{};
+    edgevision::model::scene::SharedScene sharedScene{appConfig.scene};
+    edgevision::model::scene::SceneVersionStore sceneVersionStore{};
+    edgevision::model::viewer::ViewerPoseStore viewerPoseStore{};
+    const std::size_t renderOutputHistoryCapacity = std::max(
+        appConfig.viewer.outputHistoryCapacity,
+        appConfig.debug.viewerDump.enabled ? appConfig.debug.viewerDump.maxFreshOutputs
+                                           : std::size_t{0}
+    );
+    edgevision::model::viewer::RenderOutputStore renderOutputStore{renderOutputHistoryCapacity};
+
     edgevision::capture::CameraCapture camera{};
     std::unique_ptr<edgevision::capture::frame::FrameIngestor> frameIngestor{};
     std::unique_ptr<edgevision::capture::frame::FrameIngestorRunner> frameIngestorRunner{};
 
-    if (appConfig.capture.enabled) {
-        if (!camera.open(appConfig.capture.camera.deviceIndex)) {
-            std::cerr << "Failed to open K4A device" << std::endl;
-            return 1;
-        }
-
-        const k4a_device_configuration_t k4aConfig =
-            edgevision::capture::makeK4aDeviceConfig(appConfig.capture.camera);
-        if (!camera.start(k4aConfig)) {
-            std::cerr << "Failed to start K4A cameras" << std::endl;
-            return 1;
-        }
-
-        frameIngestor =
-            std::make_unique<edgevision::capture::frame::FrameIngestor>(camera, frameStore);
-        frameIngestorRunner = std::make_unique<edgevision::capture::frame::FrameIngestorRunner>(
-            *frameIngestor, appConfig.capture.runtime
-        );
-        if (!frameIngestorRunner->start()) {
-            std::cerr << "Failed to start capture frame ingestor" << std::endl;
-            return 1;
-        }
-    }
-
-    TorchGaussianResidualModel reconstructionModel;
-    if (!reconstructionModel.isBackendAvailable()) {
-        std::cerr << "Warning: CUDA backend not available. "
-                     "Frames will be empty."
-                  << std::endl;
-    }
-
-    auto renderThread = startRenderServer(
-        appConfig.render.port,
-        [&reconstructionModel](
-            const RenderPoseRequest& req, std::vector<uint8_t>& rgbOut
-        ) -> bool {
-            ImageSize imgSize{req.width, req.height};
-            CameraIntrinsics intrinsics{req.fx, req.fy, req.cx, req.cy};
-
-            Pose4f pose{};
-            std::memcpy(pose.matrix.data(), req.pose, 16 * sizeof(float));
-
-            RgbdFrameView frame{};
-            frame.rgb.size = imgSize;
-            frame.depth.size = imgSize;
-            frame.intrinsics = intrinsics;
-            frame.cameraToWorld = pose;
-            frame.cameraToWorldSlam = pose;
-            frame.hasDepth = false;
-
-            ReconstructionObservation obs{};
-            obs.frame = frame;
-
-            HybridRenderInput input{};
-            input.observation = obs;
-
-            HybridRenderOutput output = reconstructionModel.renderHybrid(input);
-
-            // Convert float RGB [0,1] → uint8 sRGB.
-            const auto* src = output.rgb.data();
-            const auto numElements =
-                static_cast<std::size_t>(req.width) * static_cast<std::size_t>(req.height) * 3;
-            if (src != nullptr && output.rgb.size() >= numElements) {
-                for (std::size_t i = 0; i < numElements; ++i) {
-                    float v = src[i];
-                    if (v < 0.0f) {
-                        v = 0.0f;
-                    }
-
-                    if (v > 1.0f) {
-                        v = 1.0f;
-                    }
-
-                    rgbOut[i] = static_cast<uint8_t>(v * 255.0f);
-                }
-                return true;
-            }
-            return false;
-        }
+    edgevision::builder::SceneBuilderRunner sceneBuilderRunner(
+        frameStore, sharedScene, sceneVersionStore, appConfig.builder
     );
-    renderThread.join();
+    edgevision::viewer::SceneViewer sceneViewer(viewerPoseStore, sharedScene, renderOutputStore);
+    edgevision::viewer::ViewerRunner viewerRunner(sceneViewer, viewerPoseStore, appConfig.viewer);
+    edgevision::app::runtime::ViewerPoseSeeder viewerPoseSeeder(
+        frameStore, sceneVersionStore, viewerPoseStore
+    );
+    edgevision::app::runtime::ViewerFrameDumper viewerFrameDumper(
+        renderOutputStore, appConfig.debug.viewerDump
+    );
 
-    if (frameIngestorRunner) {
-        frameIngestorRunner->requestStop();
-        frameIngestorRunner->join();
+    const auto cleanup = [&]() {
+        viewerRunner.requestStop();
+        viewerRunner.join();
+        sceneBuilderRunner.requestStop();
+        sceneBuilderRunner.join();
+
+        if (frameIngestorRunner) {
+            frameIngestorRunner->requestStop();
+            frameIngestorRunner->join();
+        }
+
+        if (camera.isStarted()) {
+            camera.stop();
+        }
+
+        if (camera.isOpen()) {
+            camera.close();
+        }
+    };
+
+    if (!camera.open(appConfig.capture.camera.deviceIndex)) {
+        std::cerr << "Failed to open K4A device" << std::endl;
+        return 1;
     }
+
+    const k4a_device_configuration_t k4aConfig =
+        edgevision::capture::makeK4aDeviceConfig(appConfig.capture.camera);
+    if (!camera.start(k4aConfig)) {
+        std::cerr << "Failed to start K4A cameras" << std::endl;
+        cleanup();
+        return 1;
+    }
+
+    frameIngestor =
+        std::make_unique<edgevision::capture::frame::FrameIngestor>(camera, frameStore);
+    frameIngestorRunner = std::make_unique<edgevision::capture::frame::FrameIngestorRunner>(
+        *frameIngestor, appConfig.capture.runtime
+    );
+    if (!frameIngestorRunner->start()) {
+        std::cerr << "Failed to start capture frame ingestor" << std::endl;
+        cleanup();
+        return 1;
+    }
+
+    if (!sceneBuilderRunner.start()) {
+        std::cerr << "Failed to start scene builder runner" << std::endl;
+        cleanup();
+        return 1;
+    }
+
+    if (!viewerRunner.start()) {
+        std::cerr << "Failed to start viewer runner" << std::endl;
+        cleanup();
+        return 1;
+    }
+
+    if (!viewerPoseSeeder.seedOnce(kViewerSeedTimeout)) {
+        std::cerr << "Timed out waiting to seed the initial viewer pose" << std::endl;
+        cleanup();
+        return 1;
+    }
+
+    if (!viewerFrameDumper.waitForConfiguredOutputs(kViewerOutputTimeout)) {
+        std::cerr << "Timed out waiting for viewer render outputs" << std::endl;
+        cleanup();
+        return 1;
+    }
+
+    if (viewerFrameDumper.dumpingEnabled()) {
+        std::cout << "Dumped " << viewerFrameDumper.dumpedFreshOutputCount()
+                  << " viewer frame(s) to " << viewerFrameDumper.outputDirectory() << std::endl;
+    } else {
+        std::cout << "Observed first fresh viewer render output" << std::endl;
+    }
+
+    cleanup();
 
     return 0;
 }
