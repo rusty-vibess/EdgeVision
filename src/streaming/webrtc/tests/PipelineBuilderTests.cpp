@@ -7,6 +7,7 @@ using edgevision::streaming::webrtc::StreamConfig;
 
 TEST(PipelineBuilder, ContainsBothBranchesAndWebrtcbin) {
     StreamConfig cfg;
+    cfg.enableRgb = true;
     cfg.width = 854;
     cfg.height = 480;
     cfg.fps = 30;
@@ -15,8 +16,10 @@ TEST(PipelineBuilder, ContainsBothBranchesAndWebrtcbin) {
     EXPECT_NE(s.find("appsrc name=src_rgb"), std::string::npos);
     EXPECT_NE(s.find("appsrc name=src_tsdf"), std::string::npos);
     EXPECT_NE(s.find("webrtcbin name=sendrecv"), std::string::npos);
-    EXPECT_NE(s.find("nvv4l2h264enc"), std::string::npos);
-    EXPECT_NE(s.find("bitrate=1500000"), std::string::npos);
+    EXPECT_NE(s.find("x264enc"), std::string::npos);
+    EXPECT_NE(s.find("bitrate=1500"), std::string::npos);
+    EXPECT_NE(s.find("tune=zerolatency"), std::string::npos);
+    EXPECT_NE(s.find("threads=2"), std::string::npos);
 }
 
 TEST(PipelineBuilder, TsdfOnlyOmitsRgbBranch) {
@@ -26,6 +29,13 @@ TEST(PipelineBuilder, TsdfOnlyOmitsRgbBranch) {
     EXPECT_EQ(s.find("appsrc name=src_rgb"), std::string::npos);
     EXPECT_NE(s.find("appsrc name=src_tsdf"), std::string::npos);
     EXPECT_NE(s.find("webrtcbin name=sendrecv"), std::string::npos);
+}
+
+TEST(PipelineBuilder, DefaultsToTsdfOnlyForOrinNano) {
+    StreamConfig cfg;  // defaults: enableRgb=false
+    const auto s = pipelineString(cfg);
+    EXPECT_EQ(s.find("appsrc name=src_rgb"), std::string::npos);
+    EXPECT_NE(s.find("appsrc name=src_tsdf"), std::string::npos);
 }
 
 TEST(PipelineBuilder, FrameRateAndIdrInterval) {
