@@ -10,6 +10,10 @@ namespace edgevision::model::scene {
 
     class SharedSceneState;
 
+    namespace testing {
+        class SharedSceneTestAccess;
+    } // namespace testing
+
     /// Owns the central voxel scene and provides blocking read/write access.
     class SharedScene final {
       public:
@@ -37,6 +41,8 @@ namespace edgevision::model::scene {
         [[nodiscard]] SceneVersionId publish(SceneWriteAccess& access);
 
       private:
+        friend class testing::SharedSceneTestAccess;
+
         std::shared_ptr<SharedSceneState> m_state{};
     };
 
