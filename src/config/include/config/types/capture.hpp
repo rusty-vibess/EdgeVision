@@ -47,7 +47,7 @@ namespace edgevision::config {
     };
 
     struct CaptureConfig {
-        bool enabled = false;
+        bool enabled = true;
         CaptureCameraConfig camera{};
         CaptureRuntimeConfig runtime{};
     };

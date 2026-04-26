@@ -77,16 +77,16 @@ namespace {
         RenderOutputStore renderOutputStore{8};
     };
 
-    edgevision::config::ViewerRuntimeConfig makePoseDrivenConfig() {
+    edgevision::config::ViewerRuntimeConfig makeEventConfig() {
         edgevision::config::ViewerRuntimeConfig config{};
-        config.loopPolicy = edgevision::config::ViewerLoopPolicy::PoseDriven;
+        config.loopPolicy = edgevision::config::ViewerLoopPolicy::Event;
         config.loopPeriodMs = 2;
         return config;
     }
 
-    edgevision::config::ViewerRuntimeConfig makeLiveLoopConfig() {
+    edgevision::config::ViewerRuntimeConfig makeHotLoopConfig() {
         edgevision::config::ViewerRuntimeConfig config{};
-        config.loopPolicy = edgevision::config::ViewerLoopPolicy::LiveLoop;
+        config.loopPolicy = edgevision::config::ViewerLoopPolicy::HotLoop;
         config.loopPeriodMs = 10;
         return config;
     }
@@ -97,7 +97,7 @@ namespace {
             fixture.viewerPoseStore,
             fixture.sharedScene,
             fixture.renderOutputStore,
-            makePoseDrivenConfig()
+            makeEventConfig()
         );
 
         runner.join();
@@ -108,7 +108,7 @@ namespace {
         expectEq(status.renderAttemptCount, std::size_t{0}, "join before start should be a no-op");
     }
 
-    void testPoseDrivenWaitsForNewerPoseBeforeRendering() {
+    void testEventWaitsForNewerPoseBeforeRendering() {
         ViewerFixture fixture{};
         const std::optional<PopulatedSceneData> data =
             populateScene(fixture.sharedScene, fixture.sceneVersionStore);
@@ -121,7 +121,7 @@ namespace {
             fixture.viewerPoseStore,
             fixture.sharedScene,
             fixture.renderOutputStore,
-            makePoseDrivenConfig()
+            makeEventConfig()
         );
         expectTrue(runner.start(), "runner should start");
         expectTrue(
@@ -130,18 +130,18 @@ namespace {
                 return status.activity == SceneViewerRunnerActivity::WaitingForPose
                     && status.idleIterationCount > 0;
             }),
-            "pose-driven runner should wait when no pose is available"
+            "event runner should wait when no pose is available"
         );
         expectEq(
             runner.status().publishedOutputCount,
             std::size_t{0},
-            "pose-driven runner should not render before a pose arrives"
+            "event runner should not render before a pose arrives"
         );
 
         const ViewerPose viewerPose = fixture.viewerPoseStore.update(makeViewerPose(*data, 6));
         expectTrue(
             waitUntil([&runner]() { return runner.status().publishedOutputCount == 1; }),
-            "pose-driven runner should render after a newer pose arrives"
+            "event runner should render after a newer pose arrives"
         );
 
         runner.requestStop();
@@ -163,7 +163,7 @@ namespace {
         );
     }
 
-    void testLiveLoopRendersRepeatedlyAndUpdatesActivity() {
+    void testHotLoopRendersRepeatedlyAndUpdatesActivity() {
         ViewerFixture fixture{};
         const std::optional<PopulatedSceneData> data =
             populateScene(fixture.sharedScene, fixture.sceneVersionStore);
@@ -176,7 +176,7 @@ namespace {
             fixture.viewerPoseStore,
             fixture.sharedScene,
             fixture.renderOutputStore,
-            makeLiveLoopConfig()
+            makeHotLoopConfig()
         );
         expectTrue(runner.start(), "runner should start");
         expectTrue(
@@ -185,13 +185,13 @@ namespace {
                 return status.activity == SceneViewerRunnerActivity::Idle
                     && status.idleIterationCount > 0;
             }),
-            "live-loop runner should report idle activity before any pose is published"
+            "hot-loop runner should report idle activity before any pose is published"
         );
 
         const ViewerPose viewerPose = fixture.viewerPoseStore.update(makeViewerPose(*data, 2));
         expectTrue(
             waitUntil([&runner]() { return runner.status().publishedOutputCount >= 2; }),
-            "live-loop runner should repeatedly render the latest pose"
+            "hot-loop runner should repeatedly render the latest pose"
         );
 
         runner.requestStop();
@@ -201,27 +201,27 @@ namespace {
         expectEq(
             status.lastPoseGeneration,
             std::optional<ViewerPoseGeneration>{viewerPose.generation},
-            "live-loop runner should record the latest pose generation"
+            "hot-loop runner should record the latest pose generation"
         );
         expectTrue(
             status.activity == SceneViewerRunnerActivity::RenderedOutput,
-            "live-loop runner should report rendered activity after publishing outputs"
+            "hot-loop runner should report rendered activity after publishing outputs"
         );
         expectTrue(
             status.staleOutputCount > 0,
-            "live-loop runner should mark repeated renders of unchanged inputs as stale"
+            "hot-loop runner should mark repeated renders of unchanged inputs as stale"
         );
         expectTrue(
             status.lastOutputWasStale,
-            "live-loop runner should report stale output status after repeated rendering"
+            "hot-loop runner should report stale output status after repeated rendering"
         );
     }
 } // namespace
 
 int main() {
     testJoinBeforeStartIsNoop();
-    testPoseDrivenWaitsForNewerPoseBeforeRendering();
-    testLiveLoopRendersRepeatedlyAndUpdatesActivity();
+    testEventWaitsForNewerPoseBeforeRendering();
+    testHotLoopRendersRepeatedlyAndUpdatesActivity();
 
     if (gFailures != 0) {
         std::cerr << "Tests failed: " << gFailures << '\n';

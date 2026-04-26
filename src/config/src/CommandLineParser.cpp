@@ -38,6 +38,23 @@ namespace edgevision::config {
             return false;
         }
 
+        [[nodiscard]] bool parseViewerPolicy(
+            std::string_view value,
+            ViewerLoopPolicy& viewerLoopPolicy
+        ) {
+            if (value == "event") {
+                viewerLoopPolicy = ViewerLoopPolicy::Event;
+                return true;
+            }
+
+            if (value == "hot-loop") {
+                viewerLoopPolicy = ViewerLoopPolicy::HotLoop;
+                return true;
+            }
+
+            return false;
+        }
+
         [[nodiscard]] bool parsePositiveCount(std::string_view value, std::size_t& count) {
             const char* begin = value.data();
             const char* end = begin + value.size();
@@ -60,12 +77,22 @@ namespace edgevision::config {
     CommandLineParseResult parseCommandLine(int argc, char* argv[], const AppConfig& defaults) {
         CommandLineParseResult result{};
         result.config = defaults;
+        bool viewerDumpCountExplicit = false;
 
         for (int i = 1; i < argc; ++i) {
             const std::string_view arg(argv[i]);
 
-            if (arg == "--enable-capture") {
-                result.config.capture.enabled = true;
+            if (arg == "--disable-capture") {
+                result.config.capture.enabled = false;
+                continue;
+            }
+
+            if (arg == "--enable-debug") {
+                result.config.debug.viewerDump.enabled = true;
+                if (!viewerDumpCountExplicit) {
+                    result.config.debug.viewerDump.maxFreshOutputs = 5;
+                }
+
                 continue;
             }
 
@@ -103,6 +130,23 @@ namespace edgevision::config {
                 continue;
             }
 
+            if (arg == "--viewer-policy") {
+                if (i + 1 >= argc) {
+                    result.error = "Missing value for --viewer-policy";
+                    return result;
+                }
+
+                ViewerLoopPolicy viewerLoopPolicy = result.config.viewer.loopPolicy;
+                if (!parseViewerPolicy(argv[i + 1], viewerLoopPolicy)) {
+                    result.error = "Invalid viewer policy: " + std::string(argv[i + 1]);
+                    return result;
+                }
+
+                result.config.viewer.loopPolicy = viewerLoopPolicy;
+                ++i;
+                continue;
+            }
+
             if (arg == "--dump-viewer-frames") {
                 if (i + 1 >= argc) {
                     result.error = "Missing value for --dump-viewer-frames";
@@ -117,6 +161,7 @@ namespace edgevision::config {
 
                 result.config.debug.viewerDump.enabled = true;
                 result.config.debug.viewerDump.maxFreshOutputs = frameCount;
+                viewerDumpCountExplicit = true;
                 ++i;
                 continue;
             }

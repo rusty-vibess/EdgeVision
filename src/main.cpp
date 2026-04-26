@@ -23,8 +23,10 @@ namespace {
     constexpr auto kViewerOutputTimeout = 30s;
 } // namespace
 
-/// Usage: ./EdgeVision [--port 6688] [--enable-capture]
+/// Usage: ./EdgeVision [--port 6688] [--disable-capture]
 ///                      [--read-policy greedy|balanced]
+///                      [--viewer-policy event|hot-loop]
+///                      [--enable-debug]
 ///                      [--dump-viewer-frames N]
 int main(int argc, char* argv[]) {
     const auto parseResult = edgevision::config::parseCommandLine(argc, argv);
@@ -35,7 +37,7 @@ int main(int argc, char* argv[]) {
 
     const edgevision::config::AppConfig appConfig = parseResult.config;
     if (!appConfig.capture.enabled) {
-        std::cerr << "Viewer smoke test requires --enable-capture" << std::endl;
+        std::cerr << "Viewer smoke test requires capture to remain enabled" << std::endl;
         return 1;
     }
 
@@ -91,6 +93,7 @@ int main(int argc, char* argv[]) {
     // Starts runners and sublibs with their relevant failures
     if (!camera.open(appConfig.capture.camera.deviceIndex)) {
         std::cerr << "Failed to open K4A device" << std::endl;
+        cleanup();
         return 1;
     }
 

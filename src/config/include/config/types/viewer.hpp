@@ -5,12 +5,12 @@
 namespace edgevision::config {
 
     enum class ViewerLoopPolicy {
-        PoseDriven,
-        LiveLoop,
+        Event,
+        HotLoop,
     };
 
     struct ViewerRuntimeConfig {
-        ViewerLoopPolicy loopPolicy = ViewerLoopPolicy::PoseDriven;
+        ViewerLoopPolicy loopPolicy = ViewerLoopPolicy::Event;
         int loopPeriodMs = (1000 / 30);
         std::size_t outputHistoryCapacity = 8;
     };

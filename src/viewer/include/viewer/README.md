@@ -35,8 +35,8 @@ Public viewer control types live in this directory.
 
 ## Other Notes
 
-- `PoseDriven` waits for newer pose generations before rendering.
-- `LiveLoop` repeatedly renders the latest available pose at the configured period.
+- `Event` waits for newer pose generations before rendering.
+- `HotLoop` repeatedly renders the latest available pose at the configured period.
 - this module does not own networking or `main.cpp` integration in this pass.
 
 ## TL;DR

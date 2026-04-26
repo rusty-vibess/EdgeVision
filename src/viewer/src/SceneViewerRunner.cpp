@@ -70,7 +70,7 @@ namespace edgevision::viewer {
         edgevision::model::viewer::ViewerPoseGeneration lastPoseGeneration = 0;
 
         while (!m_stopRequested.load()) {
-            if (m_config.loopPolicy == edgevision::config::ViewerLoopPolicy::PoseDriven) {
+            if (m_config.loopPolicy == edgevision::config::ViewerLoopPolicy::Event) {
                 const std::optional<edgevision::model::viewer::ViewerPose> viewerPose =
                     m_viewerPoseStore.waitForNewer(lastPoseGeneration, loopPeriod);
                 if (!viewerPose.has_value()) {
