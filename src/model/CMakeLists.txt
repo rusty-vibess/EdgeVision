@@ -9,6 +9,8 @@ target_sources(model PRIVATE
     src/frame/state/FrameLifecycleTracker.cpp
     src/frame/utils/FrameValidator.cpp
     src/frame/utils/Submission.cpp
+    src/viewer/RenderOutputStore.cpp
+    src/viewer/ViewerPoseStore.cpp
     src/scene/SceneAccess.cpp
     src/scene/state/SceneAccessLease.cpp
     src/scene/state/SceneVersionHistory.cpp

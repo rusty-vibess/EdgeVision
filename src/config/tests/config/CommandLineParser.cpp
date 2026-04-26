@@ -6,6 +6,7 @@ namespace {
     using edgevision::config::AppConfig;
     using edgevision::config::parseCommandLine;
     using edgevision::config::ReadPolicy;
+    using edgevision::config::ViewerLoopPolicy;
 
     int gFailures = 0;
 
@@ -51,6 +52,9 @@ namespace {
         EXPECT_FALSE(result.config.capture.enabled);
         EXPECT_EQ(result.config.builder.readyFrameTimeoutMs, 50);
         EXPECT_TRUE(result.config.builder.trackerConfig.empty());
+        EXPECT_EQ(result.config.viewer.loopPolicy, ViewerLoopPolicy::PoseDriven);
+        EXPECT_EQ(result.config.viewer.loopPeriodMs, 33);
+        EXPECT_EQ(result.config.viewer.outputHistoryCapacity, std::size_t{8});
     }
 
     void testPortOverride() {
@@ -107,6 +111,9 @@ namespace {
         defaults.capture.runtime.captureTimeoutMs = 25;
         defaults.builder.readyFrameTimeoutMs = 7;
         defaults.builder.trackerConfig = "type=forcefail";
+        defaults.viewer.loopPolicy = ViewerLoopPolicy::LiveLoop;
+        defaults.viewer.loopPeriodMs = 17;
+        defaults.viewer.outputHistoryCapacity = 3;
 
         char executable[] = "EdgeVision";
         char captureFlag[] = "--enable-capture";
@@ -121,6 +128,9 @@ namespace {
         EXPECT_EQ(result.config.capture.runtime.captureTimeoutMs, 25);
         EXPECT_EQ(result.config.builder.readyFrameTimeoutMs, 7);
         EXPECT_EQ(result.config.builder.trackerConfig, defaults.builder.trackerConfig);
+        EXPECT_EQ(result.config.viewer.loopPolicy, ViewerLoopPolicy::LiveLoop);
+        EXPECT_EQ(result.config.viewer.loopPeriodMs, 17);
+        EXPECT_EQ(result.config.viewer.outputHistoryCapacity, std::size_t{3});
     }
 
     void testInvalidPortFails() {
