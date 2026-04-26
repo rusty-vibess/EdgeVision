@@ -19,6 +19,15 @@ TEST(PipelineBuilder, ContainsBothBranchesAndWebrtcbin) {
     EXPECT_NE(s.find("bitrate=1500000"), std::string::npos);
 }
 
+TEST(PipelineBuilder, TsdfOnlyOmitsRgbBranch) {
+    StreamConfig cfg;
+    cfg.enableRgb = false;
+    const auto s = pipelineString(cfg);
+    EXPECT_EQ(s.find("appsrc name=src_rgb"), std::string::npos);
+    EXPECT_NE(s.find("appsrc name=src_tsdf"), std::string::npos);
+    EXPECT_NE(s.find("webrtcbin name=sendrecv"), std::string::npos);
+}
+
 TEST(PipelineBuilder, FrameRateAndIdrInterval) {
     StreamConfig cfg;
     cfg.fps = 30;

@@ -75,13 +75,26 @@ namespace edgevision::streaming::webrtc {
     )
         : m_scene(scene), m_renderer(std::move(renderer)) {}
 
+    void TsdfFrameSource::setRenderer(
+        std::function<bool(const PoseUpdate&, std::vector<std::uint8_t>&)> renderer
+    ) {
+        std::lock_guard<std::mutex> g(m_mu);
+        m_renderer = std::move(renderer);
+    }
+
     bool TsdfFrameSource::render(
         const PoseUpdate& pose, std::vector<std::uint8_t>& out
     ) {
-        if (!m_renderer) {
+        // Copy under lock so setRenderer can't invalidate the callable mid-call.
+        std::function<bool(const PoseUpdate&, std::vector<std::uint8_t>&)> renderer;
+        {
+            std::lock_guard<std::mutex> g(m_mu);
+            renderer = m_renderer;
+        }
+        if (!renderer) {
             return false;
         }
-        return m_renderer(pose, out);
+        return renderer(pose, out);
     }
 
 } // namespace edgevision::streaming::webrtc

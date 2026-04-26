@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <mutex>
 #include <vector>
 
 namespace edgevision::model::frame { class FrameStore; }
@@ -30,12 +31,18 @@ namespace edgevision::streaming::webrtc {
     };
 
     /// Renders a TSDF raycast at the requested pose. Returns BGR (24-bit).
-    /// Implementation calls into the existing reconstruction module.
     /// Thread-safe.
     class TsdfFrameSource {
       public:
         TsdfFrameSource(
             edgevision::model::scene::SharedScene& scene,
+            std::function<bool(const PoseUpdate&, std::vector<std::uint8_t>&)> renderer
+        );
+
+        /// Replace the renderer at any time (e.g. once George's raycaster is
+        /// ready). Safe to call concurrently with render(). Passing nullptr
+        /// disables the TSDF track (render() returns false).
+        void setRenderer(
             std::function<bool(const PoseUpdate&, std::vector<std::uint8_t>&)> renderer
         );
 
@@ -46,6 +53,7 @@ namespace edgevision::streaming::webrtc {
 
       private:
         edgevision::model::scene::SharedScene& m_scene;
+        mutable std::mutex m_mu;
         std::function<bool(const PoseUpdate&, std::vector<std::uint8_t>&)> m_renderer;
     };
 

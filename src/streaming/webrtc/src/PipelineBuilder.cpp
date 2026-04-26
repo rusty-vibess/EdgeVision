@@ -34,8 +34,10 @@ namespace edgevision::streaming::webrtc {
 
     std::string pipelineString(const StreamConfig& cfg) {
         std::ostringstream oss;
-        oss << makeBranchString(cfg, "src_rgb", 96)
-            << " " << makeBranchString(cfg, "src_tsdf", 97)
+        if (cfg.enableRgb) {
+            oss << makeBranchString(cfg, "src_rgb", 96) << " ";
+        }
+        oss << makeBranchString(cfg, "src_tsdf", 97)
             << " webrtcbin name=sendrecv stun-server=" << cfg.stunServer
             << " bundle-policy=max-bundle";
         return oss.str();
