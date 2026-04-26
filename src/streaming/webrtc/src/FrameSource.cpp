@@ -9,11 +9,6 @@
 #include <cstring>
 #include <utility>
 
-// `SharedScene` is referenced only via reference (`m_scene`). The full
-// definition is expected to land in `model/scene/SharedScene.hpp` on a
-// follow-up branch; for the streaming_webrtc translation unit a forward
-// declaration in the header is sufficient because we never call into it.
-
 namespace edgevision::streaming::webrtc {
 
     RgbFrameSource::RgbFrameSource(edgevision::model::frame::FrameStore& store)
