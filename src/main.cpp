@@ -69,9 +69,10 @@ int main(int argc, char* argv[]) {
     wrtcCfg.height = 480;
     wrtcCfg.fps = 30;
     wrtcCfg.bitrateBps = 1500000;
-    // SharedScene is owned by the model module; if not yet exposed in
-    // appConfig, instantiate one here. Adjust to wherever the scene
-    // ends up living on origin/main.
+    // Local SharedScene for now — the WebRTC server holds a reference but
+    // never dereferences it (TSDF rendering goes through setTsdfRenderer's
+    // closure). Once SceneBuilderRunner is wired into main.cpp, swap this
+    // for the builder's SharedScene so closures can share the same instance.
     edgevision::model::scene::SharedScene sharedScene;
     auto webrtcServer = edgevision::streaming::webrtc::startWebRtcServer(
         wrtcCfg, frameStore, sharedScene
