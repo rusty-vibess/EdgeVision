@@ -11,6 +11,11 @@ namespace edgevision::streaming::webrtc {
         std::string makeBranchString(
             const StreamConfig& cfg, const std::string& name, std::uint32_t pt
         ) {
+            // Software x264 encode: Orin Nano has no NVENC. Pin to cores 4-5
+            // (StreamConfig.pumpCoreMask) and keep `threads=2` to fit the budget.
+            // x264enc bitrate is in kbps, not bps; tune=zerolatency disables
+            // B-frames which is required for WebRTC anyway.
+            const std::uint32_t kbps = cfg.bitrateBps / 1000u;
             std::ostringstream oss;
             oss
                 << "appsrc name=" << name << " is-live=true do-timestamp=true format=time"
@@ -19,10 +24,10 @@ namespace edgevision::streaming::webrtc {
                 << ",framerate=" << cfg.fps << "/1\""
                 << " ! queue max-size-buffers=2 leaky=downstream"
                 << " ! videoconvert ! video/x-raw,format=I420"
-                << " ! nvvidconv ! video/x-raw(memory:NVMM),format=NV12"
-                << " ! nvv4l2h264enc bitrate=" << cfg.bitrateBps
-                << " maxperf-enable=true preset-level=4 profile=0"
-                << " insert-sps-pps=true insert-aud=true idrinterval=" << cfg.fps
+                << " ! x264enc tune=zerolatency speed-preset=ultrafast"
+                << " bitrate=" << kbps << " threads=2"
+                << " key-int-max=" << cfg.fps
+                << " ! video/x-h264,profile=baseline"
                 << " ! h264parse config-interval=-1"
                 << " ! rtph264pay pt=" << pt << " config-interval=-1"
                 << " ! application/x-rtp,media=video,encoding-name=H264,payload=" << pt

@@ -1,7 +1,12 @@
 # ---- WebRTC streaming module ----
-# Two H.264 tracks (RGB + TSDF) over webrtcbin + JSON signalling on a
-# tiny WebSocket listener. Designed for Jetson Orin Nano: 854x480@30
-# per track, 1.5 Mbps, NVENC via nvv4l2h264enc.
+# H.264 over webrtcbin + JSON signalling on a tiny WebSocket listener.
+# Designed for Jetson Orin Nano: 854x480@30, 1.5 Mbps, software x264enc
+# (Orin Nano has no NVENC). Default mode is TSDF-only; RGB lives on
+# the existing TCP RenderServer to keep within the single-stream budget.
+#
+# Sysroot must include gstreamer1.0-plugins-ugly (provides x264enc) on
+# top of the standard gst-plugins-base/good/bad set already present on
+# JetPack r36.4.4.
 #
 # Deps come from JetPack r36.4.4 sysroot (gstreamer-1.0 + plugins) plus:
 # - websocketpp (header-only, FetchContent)

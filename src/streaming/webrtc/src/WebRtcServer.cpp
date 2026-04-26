@@ -81,17 +81,19 @@ namespace edgevision::streaming::webrtc {
             return ViewMode::Dual;
         }
 
-        void pinToCore(std::thread& t, int core) {
+        void pinToCoreMask(std::thread& t, const std::vector<int>& cores) {
 #ifdef __linux__
-            if (core < 0) { return; }
+            if (cores.empty()) { return; }
             cpu_set_t mask;
             CPU_ZERO(&mask);
-            CPU_SET(core, &mask);
+            for (int c : cores) {
+                if (c >= 0) { CPU_SET(c, &mask); }
+            }
             if (pthread_setaffinity_np(t.native_handle(), sizeof(mask), &mask) != 0) {
-                std::cerr << "pinToCore(" << core << ") failed\n";
+                std::cerr << "pinToCoreMask failed\n";
             }
 #else
-            (void)t; (void)core;
+            (void)t; (void)cores;
 #endif
         }
 
@@ -131,10 +133,10 @@ namespace edgevision::streaming::webrtc {
 
             if (m_config.enableRgb) {
                 m_pumpRgb = std::thread([this] { pumpRgb(); });
-                pinToCore(m_pumpRgb, m_config.pumpRgbCore);
+                pinToCoreMask(m_pumpRgb, m_config.pumpCoreMask);
             }
             m_pumpTsdf = std::thread([this] { pumpTsdf(); });
-            pinToCore(m_pumpTsdf, m_config.pumpTsdfCore);
+            pinToCoreMask(m_pumpTsdf, m_config.pumpCoreMask);
         }
 
         void stop() {
