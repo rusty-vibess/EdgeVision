@@ -4,15 +4,9 @@ Public viewer control types live in this directory.
 
 ## Public API
 
-### Render Worker
-
-- `SceneViewer`
-  - `renderLatestPose()`
-  - `renderPose(const ViewerPose&)`
-
 ### Background Runner
 
-- `ViewerRunner`
+- `SceneViewerRunner`
   - `start()`
   - `requestStop()`
   - `join()`
@@ -23,12 +17,21 @@ Public viewer control types live in this directory.
 
 - `types/runner.hpp`
 
+## Internal Implementation
+
+### Internal Types
+
+- `SceneViewer`
+  - private synchronous worker owned by `SceneViewerRunner`
+
 ## Flow
 
-- `SceneViewer` reads `ViewerPose` snapshots and acquires `SharedScene::read()`
+- `SceneViewerRunner` waits for or samples `ViewerPose` snapshots from `ViewerPoseStore`
+- the internal `SceneViewer` worker acquires `SharedScene::read()` for one supplied pose
 - the internal InfiniTAM pipeline keeps free-view render state warm across renders
 - rendered RGB outputs are published into `RenderOutputStore`
-- `ViewerRunner` drives `SceneViewer` according to `ViewerRuntimeConfig.loopPolicy`
+- `SceneViewerRunner` drives the private `SceneViewer` worker according to
+  `ViewerRuntimeConfig.loopPolicy`
 
 ## Other Notes
 
@@ -38,6 +41,6 @@ Public viewer control types live in this directory.
 
 ## TL;DR
 
-- `SceneViewer` is the synchronous render facade.
-- `ViewerRunner` is the lifecycle wrapper for background rendering loops.
+- `SceneViewerRunner` is the public lifecycle wrapper for background rendering loops.
+- `SceneViewer` is now a private worker owned by the runner.
 - output publication still happens through `model/viewer` stores.

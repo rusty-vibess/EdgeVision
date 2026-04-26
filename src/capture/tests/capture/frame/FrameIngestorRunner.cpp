@@ -11,7 +11,6 @@
 namespace {
     using edgevision::capture::CameraCapture;
     using edgevision::capture::frame::FrameIngestCode;
-    using edgevision::capture::frame::FrameIngestor;
     using edgevision::capture::frame::FrameIngestorRunner;
     using edgevision::config::CaptureRuntimeConfig;
     using edgevision::model::frame::FrameStore;
@@ -70,8 +69,7 @@ namespace {
     void testJoinBeforeStartIsNoop() {
         CameraCapture camera{};
         FrameStore store{};
-        FrameIngestor ingestor(camera, store);
-        FrameIngestorRunner runner(ingestor, makeFastRuntimeConfig());
+        FrameIngestorRunner runner(camera, store, makeFastRuntimeConfig());
 
         runner.join();
 
@@ -84,8 +82,7 @@ namespace {
     void testStartStopJoinRecordsCaptureFailures() {
         CameraCapture camera{};
         FrameStore store{};
-        FrameIngestor ingestor(camera, store);
-        FrameIngestorRunner runner(ingestor, makeFastRuntimeConfig());
+        FrameIngestorRunner runner(camera, store, makeFastRuntimeConfig());
 
         EXPECT_TRUE(runner.start());
         EXPECT_TRUE(waitForAttempts(runner));
@@ -108,8 +105,7 @@ namespace {
     void testStartIsRejectedWhileRunning() {
         CameraCapture camera{};
         FrameStore store{};
-        FrameIngestor ingestor(camera, store);
-        FrameIngestorRunner runner(ingestor, makeFastRuntimeConfig());
+        FrameIngestorRunner runner(camera, store, makeFastRuntimeConfig());
 
         EXPECT_TRUE(runner.start());
         EXPECT_FALSE(runner.start());

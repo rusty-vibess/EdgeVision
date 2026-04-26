@@ -8,21 +8,21 @@
 
 namespace edgevision::viewer {
 
-    /// Summarizes the viewer runner's current loop activity.
-    enum class ViewerRunnerActivity {
+    /// Summarizes the scene viewer runner's current loop activity.
+    enum class SceneViewerRunnerActivity {
         Idle,
         WaitingForPose,
         RenderedOutput,
     };
 
-    /// Captures the latest observable status of the background viewer loop.
-    struct ViewerRunnerStatus {
+    /// Captures the latest observable status of the background scene viewer loop.
+    struct SceneViewerRunnerStatus {
         /// Whether the runner thread is currently active.
         bool running = false;
         /// Whether a stop has been requested.
         bool stopRequested = false;
         /// The most recent high-level activity observed in the loop.
-        ViewerRunnerActivity activity = ViewerRunnerActivity::Idle;
+        SceneViewerRunnerActivity activity = SceneViewerRunnerActivity::Idle;
         /// Total number of render attempts made by the loop.
         std::size_t renderAttemptCount = 0;
         /// Total number of outputs published by the loop.

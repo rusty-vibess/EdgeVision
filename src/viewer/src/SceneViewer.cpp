@@ -1,11 +1,10 @@
-#include "viewer/SceneViewer.hpp"
+#include "viewer/state/SceneViewer.hpp"
 
 #include <cmath>
 #include <memory>
 
 #include "model/scene/SharedScene.hpp"
 #include "model/viewer/RenderOutputStore.hpp"
-#include "model/viewer/ViewerPoseStore.hpp"
 #include "viewer/state/InfiniTamViewerPipeline.hpp"
 
 namespace edgevision::viewer {
@@ -31,26 +30,14 @@ namespace edgevision::viewer {
     } // namespace
 
     SceneViewer::SceneViewer(
-        edgevision::model::viewer::ViewerPoseStore& viewerPoseStore,
         edgevision::model::scene::SharedScene& sharedScene,
         edgevision::model::viewer::RenderOutputStore& renderOutputStore
     )
-        : m_viewerPoseStore(viewerPoseStore),
-          m_sharedScene(sharedScene),
+        : m_sharedScene(sharedScene),
           m_renderOutputStore(renderOutputStore),
           m_pipeline(std::make_unique<InfiniTamViewerPipeline>()) {}
 
     SceneViewer::~SceneViewer() = default;
-
-    std::optional<edgevision::model::viewer::RenderOutput> SceneViewer::renderLatestPose() {
-        const std::optional<edgevision::model::viewer::ViewerPose> viewerPose =
-            m_viewerPoseStore.latest();
-        if (!viewerPose.has_value()) {
-            return std::nullopt;
-        }
-
-        return renderPose(*viewerPose);
-    }
 
     std::optional<edgevision::model::viewer::RenderOutput> SceneViewer::renderPose(
         const edgevision::model::viewer::ViewerPose& viewerPose
