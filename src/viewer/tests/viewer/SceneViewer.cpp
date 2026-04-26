@@ -1,11 +1,13 @@
 #include "viewer/state/SceneViewer.hpp"
 
+#include <cstddef>
 #include <iostream>
 #include <optional>
 #include <source_location>
 #include <string_view>
 #include <vector>
 
+#include "ITMLib/ITMLibDefines.h"
 #include "model/scene/SceneVersionStore.hpp"
 #include "model/scene/SharedScene.hpp"
 #include "model/viewer/RenderOutputStore.hpp"
@@ -49,6 +51,21 @@ namespace {
         }
     }
 
+    [[nodiscard]] bool hasChromaticPixel(const RenderOutput& renderOutput) {
+        const auto pixelCount = renderOutput.rgb.byteCount / 3;
+        for (std::size_t index = 0; index < pixelCount; ++index) {
+            const auto red = std::to_integer<unsigned char>(renderOutput.rgb.data[index * 3]);
+            const auto green =
+                std::to_integer<unsigned char>(renderOutput.rgb.data[index * 3 + 1]);
+            const auto blue = std::to_integer<unsigned char>(renderOutput.rgb.data[index * 3 + 2]);
+            if (red != green || green != blue) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     void testRenderPosePublishesRgbOutput() {
         SharedScene sharedScene{edgevision::config::SceneReadPolicy::Balanced};
         SceneVersionStore sceneVersionStore{};
@@ -83,6 +100,12 @@ namespace {
             static_cast<std::size_t>(data->frame.rgb.size.width * data->frame.rgb.size.height * 3),
             "render output should be tightly packed RGB"
         );
+        if constexpr (ITMVoxel::hasColorInformation) {
+            expectTrue(
+                hasChromaticPixel(*renderOutput),
+                "colour voxel builds should render at least one chromatic pixel"
+            );
+        }
         expectEq(
             renderOutput->poseGeneration,
             viewerPose.generation,
