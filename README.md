@@ -262,11 +262,13 @@ Perf is available on the Jetson form metric dumping.
 For gdb:
 
 ```bash
-sudo gdb --args ./bin/EdgeVision --enable-capture
+sudo LD_LIBRARY_PATH="$PWD/lib" gdb --args ./bin/EdgeVision --enable-debug
 ```
 
 ```gdb
-set env LD_LIBRARY_PATH /home/rusty/dev/latest_edgevision_bundle/bundle/lib
+
+show env LD_LIBRARY_PATH
+LD_LIBRARY_PATH = path/to/bundle/lib
 # Then standard gdb style debugging from there
 # Useful functions to stop on
 edgevision::model::frame::FrameStore::submitFrame(edgevision::model::frame::Frame)
@@ -377,7 +379,7 @@ scp -r build/bundle nano:dev/latest_edgevision_bundle
 # scp just latest bin to jetson (saves writes)
 scp -r build/bundle/bin/* nano:dev/latest_edgevision_bundle/bundle/bin
 # Run programme from bundle root
-sudo LD_LIBRARY_PATH="$PWD/lib:$LD_LIBRARY_PATH" ./bin/EdgeVision --enable-capture
+sudo LD_LIBRARY_PATH="$PWD/lib:$LD_LIBRARY_PATH" ./bin/EdgeVision
 # Debug
-gdb --args ./bin/EdgeVision --enable-capture
+gdb --args ./bin/EdgeVision
 ```
