@@ -2,6 +2,7 @@
 
 #include <memory>
 
+#include "config/types/scene.hpp"
 #include "model/scene/SceneAccess.hpp"
 #include "model/scene/types/access.hpp"
 
@@ -12,7 +13,10 @@ namespace edgevision::model::scene {
     /// Owns the central voxel scene and provides blocking read/write access.
     class SharedScene final {
       public:
-        explicit SharedScene(SceneReadPolicy readPolicy = SceneReadPolicy::Greedy);
+        explicit SharedScene(
+            const edgevision::config::SceneConfig& config = edgevision::config::SceneConfig{}
+        );
+        explicit SharedScene(edgevision::config::SceneReadPolicy readPolicy);
         ~SharedScene();
 
         SharedScene(SharedScene&& other) noexcept;

@@ -51,7 +51,7 @@ namespace {
     }
 
     void testRenderLatestPosePublishesRgbOutput() {
-        SharedScene sharedScene{SceneReadPolicy::Balanced};
+        SharedScene sharedScene{edgevision::config::SceneReadPolicy::Balanced};
         SceneVersionStore sceneVersionStore{};
         const std::optional<PopulatedSceneData> data =
             populateScene(sharedScene, sceneVersionStore);
@@ -109,7 +109,7 @@ namespace {
     }
 
     void testRepeatedRenderOfUnchangedInputsMarksOutputStale() {
-        SharedScene sharedScene{SceneReadPolicy::Balanced};
+        SharedScene sharedScene{edgevision::config::SceneReadPolicy::Balanced};
         SceneVersionStore sceneVersionStore{};
         const std::optional<PopulatedSceneData> data =
             populateScene(sharedScene, sceneVersionStore);

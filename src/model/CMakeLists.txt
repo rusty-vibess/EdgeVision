@@ -31,6 +31,7 @@ target_include_directories(model SYSTEM PUBLIC
 )
 
 target_link_libraries(model PUBLIC
+    config
     readerwriterqueue::readerwriterqueue
     InfiniTAM::ITMLib
 )
