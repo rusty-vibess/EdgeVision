@@ -26,8 +26,6 @@ namespace edgevision::streaming::webrtc {
 
     namespace {
 
-        constexpr auto kDataChannelLabel = "control";
-
         // Simple pose mailbox. Pose-pump thread reads the latest pose for
         // each TSDF render; client may send poses faster or slower than
         // 30 Hz — we always use the most recent one.
@@ -284,12 +282,18 @@ namespace edgevision::streaming::webrtc {
                 {"type", "hello"},
                 {"from", "edgevision-jetson"},
             }.dump());
+            // MID values must match the SDP m-line order. When RGB is disabled
+            // there is only one m-line so TSDF lands at MID "0", not "1".
+            json tracks = json::array();
+            if (self->m_config.enableRgb) {
+                tracks.push_back(json{{"mid", "0"}, {"kind", "rgb"}});
+                tracks.push_back(json{{"mid", "1"}, {"kind", "tsdf"}});
+            } else {
+                tracks.push_back(json{{"mid", "0"}, {"kind", "tsdf"}});
+            }
             self->sendControlText(json{
                 {"type", "track_info"},
-                {"tracks", json::array({
-                    json{{"mid", "0"}, {"kind", "rgb"}},
-                    json{{"mid", "1"}, {"kind", "tsdf"}},
-                })},
+                {"tracks", tracks},
             }.dump());
         }
 
@@ -347,13 +351,21 @@ namespace edgevision::streaming::webrtc {
             std::vector<std::uint8_t> buffer;
             while (m_running.load()) {
                 const auto t0 = std::chrono::steady_clock::now();
+                // Ref appsrc under lock — mirrors pumpTsdf so tearDownPipeline
+                // can't free the element while pull()+pushBuffer() run outside lock.
+                GstElement* appsrc = nullptr;
                 {
                     std::lock_guard<std::mutex> g(m_pcMu);
                     if (m_handles.rgbAppSrc != nullptr &&
-                        m_viewMode.load() != ViewMode::Tsdf &&
-                        m_rgbSource.pull(m_config.width, m_config.height, buffer)) {
-                        pushBuffer(m_handles.rgbAppSrc, buffer);
+                        m_viewMode.load() != ViewMode::Tsdf) {
+                        appsrc = GST_ELEMENT(gst_object_ref(m_handles.rgbAppSrc));
                     }
+                }
+                if (appsrc != nullptr) {
+                    if (m_rgbSource.pull(m_config.width, m_config.height, buffer)) {
+                        pushBuffer(appsrc, buffer);
+                    }
+                    gst_object_unref(appsrc);
                 }
                 std::this_thread::sleep_until(t0 + frameDuration);
             }
