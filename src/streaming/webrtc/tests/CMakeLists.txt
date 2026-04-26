@@ -9,6 +9,7 @@ FetchContent_MakeAvailable(googletest)
 
 add_executable(streaming_webrtc_tests
     PipelineBuilderTests.cpp
+    FrameSourceTests.cpp
 )
 target_link_libraries(streaming_webrtc_tests
     PRIVATE streaming_webrtc gtest_main

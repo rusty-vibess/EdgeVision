@@ -6,6 +6,8 @@
 #include <iostream>
 #include <mutex>
 #include <optional>
+#include <pthread.h>
+#include <sched.h>
 #include <thread>
 
 #include <gst/app/gstappsrc.h>
@@ -81,6 +83,20 @@ namespace edgevision::streaming::webrtc {
             return ViewMode::Dual;
         }
 
+        void pinToCore(std::thread& t, int core) {
+#ifdef __linux__
+            if (core < 0) { return; }
+            cpu_set_t mask;
+            CPU_ZERO(&mask);
+            CPU_SET(core, &mask);
+            if (pthread_setaffinity_np(t.native_handle(), sizeof(mask), &mask) != 0) {
+                std::cerr << "pinToCore(" << core << ") failed\n";
+            }
+#else
+            (void)t; (void)core;
+#endif
+        }
+
     } // namespace
 
     struct WebRtcServer::Impl {
@@ -107,7 +123,7 @@ namespace edgevision::streaming::webrtc {
                 onOffer(sdp, std::move(reply));
             };
             cb.onIce = [this](const json& candidate) { onIceFromClient(candidate); };
-            cb.onClientConnected = [] { std::cerr << "client connected\n"; };
+            cb.onClientConnected = [] {};
             cb.onClientDisconnected = [this] { onClientDisconnected(); };
 
             m_signalling = std::make_unique<SignallingHandler>(
@@ -115,10 +131,12 @@ namespace edgevision::streaming::webrtc {
             );
             m_signalling->start();
 
-            m_pumpRgb = std::thread([this] { pumpRgb(); });
+            if (m_config.enableRgb) {
+                m_pumpRgb = std::thread([this] { pumpRgb(); });
+                pinToCore(m_pumpRgb, m_config.pumpRgbCore);
+            }
             m_pumpTsdf = std::thread([this] { pumpTsdf(); });
-            std::cerr << "WebRtcServer up on ws://" << m_config.signallingHost
-                      << ":" << m_config.signallingPort << "/" << std::endl;
+            pinToCore(m_pumpTsdf, m_config.pumpTsdfCore);
         }
 
         void stop() {
@@ -131,6 +149,12 @@ namespace edgevision::streaming::webrtc {
             if (m_pumpRgb.joinable()) m_pumpRgb.join();
             if (m_pumpTsdf.joinable()) m_pumpTsdf.join();
             tearDownPipeline();
+        }
+
+        void setTsdfRenderer(
+            std::function<bool(const PoseUpdate&, std::vector<std::uint8_t>&)> renderer
+        ) {
+            m_tsdfSource.setRenderer(std::move(renderer));
         }
 
       private:
@@ -299,7 +323,6 @@ namespace edgevision::streaming::webrtc {
         }
 
         void onClientDisconnected() {
-            std::cerr << "client disconnected; tearing down pipeline\n";
             std::lock_guard<std::mutex> g(m_pcMu);
             tearDownPipeline();
         }
@@ -324,9 +347,11 @@ namespace edgevision::streaming::webrtc {
             std::vector<std::uint8_t> buffer;
             while (m_running.load()) {
                 const auto t0 = std::chrono::steady_clock::now();
-                if (m_handles.rgbAppSrc != nullptr &&
-                    m_viewMode != ViewMode::Tsdf) {
-                    if (m_rgbSource.pull(m_config.width, m_config.height, buffer)) {
+                {
+                    std::lock_guard<std::mutex> g(m_pcMu);
+                    if (m_handles.rgbAppSrc != nullptr &&
+                        m_viewMode.load() != ViewMode::Tsdf &&
+                        m_rgbSource.pull(m_config.width, m_config.height, buffer)) {
                         pushBuffer(m_handles.rgbAppSrc, buffer);
                     }
                 }
@@ -339,13 +364,22 @@ namespace edgevision::streaming::webrtc {
             std::vector<std::uint8_t> buffer;
             while (m_running.load()) {
                 const auto t0 = std::chrono::steady_clock::now();
-                if (m_handles.tsdfAppSrc != nullptr &&
-                    m_viewMode != ViewMode::Rgb) {
-                    auto pose = m_pose.get();
-                    if (pose.has_value() &&
-                        m_tsdfSource.render(*pose, buffer)) {
-                        pushBuffer(m_handles.tsdfAppSrc, buffer);
+                // Ref the appsrc under lock so tearDownPipeline can't free it
+                // while we hold a live pointer into render() below.
+                GstElement* appsrc = nullptr;
+                {
+                    std::lock_guard<std::mutex> g(m_pcMu);
+                    if (m_handles.tsdfAppSrc != nullptr &&
+                        m_viewMode.load() != ViewMode::Rgb) {
+                        appsrc = GST_ELEMENT(gst_object_ref(m_handles.tsdfAppSrc));
                     }
+                }
+                if (appsrc != nullptr) {
+                    auto pose = m_pose.get();
+                    if (pose.has_value() && m_tsdfSource.render(*pose, buffer)) {
+                        pushBuffer(appsrc, buffer);
+                    }
+                    gst_object_unref(appsrc);
                 }
                 std::this_thread::sleep_until(t0 + frameDuration);
             }
@@ -392,6 +426,11 @@ namespace edgevision::streaming::webrtc {
     WebRtcServer::~WebRtcServer() = default;
     void WebRtcServer::start() { m_impl->start(); }
     void WebRtcServer::stop() { m_impl->stop(); }
+    void WebRtcServer::setTsdfRenderer(
+        std::function<bool(const PoseUpdate&, std::vector<std::uint8_t>&)> renderer
+    ) {
+        m_impl->setTsdfRenderer(std::move(renderer));
+    }
 
     std::unique_ptr<WebRtcServer> startWebRtcServer(
         StreamConfig config,

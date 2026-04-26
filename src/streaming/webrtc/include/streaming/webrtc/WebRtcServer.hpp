@@ -1,8 +1,12 @@
 #pragma once
 
+#include <cstdint>
+#include <functional>
 #include <memory>
 #include <thread>
+#include <vector>
 
+#include "streaming/webrtc/types/PoseUpdate.hpp"
 #include "streaming/webrtc/types/StreamConfig.hpp"
 
 namespace edgevision::model::frame { class FrameStore; }
@@ -26,6 +30,12 @@ namespace edgevision::streaming::webrtc {
 
         void start();
         void stop();
+
+        /// Wire George's TSDF raycaster. Call after start(); safe to call at
+        /// any time. Passing nullptr disables the TSDF track (black frames).
+        void setTsdfRenderer(
+            std::function<bool(const PoseUpdate&, std::vector<std::uint8_t>&)> renderer
+        );
 
       private:
         struct Impl;
