@@ -32,7 +32,7 @@ namespace edgevision::builder {
 
         /// Recreates pipeline state when the scene or frame layout changes.
         void ensurePipelineForScene(
-            const edgevision::model::scene::InfiniTamScene& scene,
+            edgevision::model::scene::InfiniTamScene& scene,
             const edgevision::model::frame::Frame& frame
         );
 
@@ -54,7 +54,7 @@ namespace edgevision::builder {
         [[nodiscard]] bool needsPipelineReset(const edgevision::model::frame::Frame& frame) const;
         [[nodiscard]] bool needsViewReset(const edgevision::model::frame::Frame& frame) const;
         void resetPipeline(
-            const edgevision::model::scene::InfiniTamScene& scene,
+            edgevision::model::scene::InfiniTamScene& scene,
             const edgevision::model::frame::Frame& frame
         );
         void resetView(const edgevision::model::frame::Frame& frame);

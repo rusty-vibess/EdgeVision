@@ -1,10 +1,13 @@
 #include "builder/state/SceneBuilder.hpp"
 
+#include <cuda_runtime.h>
 #include <iostream>
 #include <optional>
 #include <source_location>
 #include <string_view>
+#include <vector>
 
+#include "ITMLib/Objects/Scene/ITMVoxelBlockHash.h"
 #include "config/types/builder.hpp"
 #include "test_frames.hpp"
 
@@ -50,6 +53,47 @@ namespace {
         return index.getNumAllocatedVoxelBlocks() - scene.localVBA.lastFreeBlockId - 1;
     }
 
+    bool copyHashEntriesToHost(
+        const InfiniTamScene& scene,
+        std::vector<ITMHashEntry>& hostEntries
+    ) {
+        const std::size_t entryCount = static_cast<std::size_t>(scene.index.noTotalEntries);
+        hostEntries.resize(entryCount);
+
+        return cudaMemcpy(
+                   hostEntries.data(),
+                   scene.index.GetEntries(),
+                   entryCount * sizeof(ITMHashEntry),
+                   cudaMemcpyDeviceToHost
+               )
+            == cudaSuccess;
+    }
+
+    bool hashSceneLooksValid(const InfiniTamScene& scene) {
+        std::vector<ITMHashEntry> hostEntries{};
+        if (!copyHashEntriesToHost(scene, hostEntries)) {
+            return false;
+        }
+
+        std::size_t allocatedEntryCount = 0;
+        for (const ITMHashEntry& entry : hostEntries) {
+            if (entry.ptr < 0) {
+                continue;
+            }
+
+            if (entry.ptr >= SDF_LOCAL_BLOCK_NUM) {
+                return false;
+            }
+
+            ++allocatedEntryCount;
+            if (allocatedEntryCount > static_cast<std::size_t>(SDF_LOCAL_BLOCK_NUM)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     void testBootstrapFrameIntegratesPublishesAndStoresSceneVersion() {
         SharedScene sharedScene{};
         SceneVersionStore sceneVersionStore{};
@@ -86,6 +130,10 @@ namespace {
         expectTrue(
             usedBlockCount(readAccess.scene()) > 0,
             "successful build should allocate TSDF scene blocks"
+        );
+        expectTrue(
+            hashSceneLooksValid(readAccess.scene()),
+            "successful build should leave a structurally valid hash scene"
         );
     }
 
