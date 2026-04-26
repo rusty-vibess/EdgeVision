@@ -14,9 +14,12 @@
 #include <utility>
 #include <vector>
 
+#include "scene/testing/SharedSceneTestAccess.hpp"
+
 namespace {
     using edgevision::config::SceneReadPolicy;
     using namespace edgevision::model::scene;
+    using edgevision::model::scene::testing::SharedSceneTestAccess;
     using namespace std::chrono_literals;
 
     static_assert(
@@ -87,6 +90,13 @@ namespace {
         }
 
         return predicate();
+    }
+
+    bool waitForWaitingWriter(const SharedScene& scene, std::chrono::milliseconds timeout = 1s) {
+        return waitUntil(
+            [&scene]() { return SharedSceneTestAccess::lockState(scene).waitingWriterCount > 0; },
+            timeout
+        );
     }
 
     void expectBlockedReadGetsPriorityAheadOfWaitingWriter(SceneReadPolicy readPolicy) {
@@ -328,6 +338,10 @@ namespace {
             });
 
             writerStartedFuture.wait();
+            expectTrue(
+                waitForWaitingWriter(scene),
+                "writer should become queued behind the existing reader"
+            );
             secondReader = std::thread([&scene,
                                         &secondReaderStarted,
                                         &releaseSecondReaderSignal,
@@ -387,13 +401,17 @@ namespace {
                     writerAcquired.store(true);
                     releaseWriterSignal.wait();
                 });
+
+            writerStartedFuture.wait();
+            expectTrue(
+                waitForWaitingWriter(scene),
+                "writer should become queued behind the existing reader"
+            );
             secondReader = std::thread([&scene, &secondReaderStarted, &secondReaderAcquired]() {
                 secondReaderStarted.set_value();
                 auto readAccess = scene.read();
                 secondReaderAcquired.store(true);
             });
-
-            writerStartedFuture.wait();
             secondReaderStartedFuture.wait();
 
             expectTrue(
