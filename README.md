@@ -181,8 +181,14 @@ Finally, for CUDA-specific diagnostics, run `compute-sanitizer` directly against
 
 ```bash
 for tool in memcheck racecheck initcheck synccheck; do
-  compute-sanitizer --tool "$tool" --leak-check full --report-api-errors all "./tests/<TEST_BINARY>" || break
+    echo "Running $tool..."
+    compute-sanitizer --tool "$tool" \
+    --leak-check full \
+    --report-api-errors all \
+    --log-file "sanitizer_${tool}_log.txt" \
+    "./tests/<TEST_BIN>" >> "sanitizer_${tool}_log.txt" 2>&1 || break
 done
+
 ```
 
 `ASAN_OPTIONS=alloc_dealloc_mismatch=0` to stop builder_tests error in InfiniTAM upstream.
