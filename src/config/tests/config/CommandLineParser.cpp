@@ -47,7 +47,10 @@ namespace {
         const auto result = parseCommandLine(1, argv);
 
         EXPECT_TRUE(result.parsed());
-        EXPECT_EQ(result.config.streaming.port, 6688);
+        EXPECT_FALSE(result.config.streaming.tcp.enabled);
+        EXPECT_EQ(result.config.streaming.tcp.port, 6688);
+        EXPECT_TRUE(result.config.streaming.webrtc.enabled);
+        EXPECT_EQ(result.config.streaming.webrtc.signallingPort, std::uint16_t{6689});
         EXPECT_EQ(result.config.scene.readPolicy, SceneReadPolicy::Greedy);
         EXPECT_TRUE(result.config.capture.enabled);
         EXPECT_EQ(result.config.builder.readyFrameTimeoutMs, 50);
@@ -68,7 +71,7 @@ namespace {
         const auto result = parseCommandLine(3, argv);
 
         EXPECT_TRUE(result.parsed());
-        EXPECT_EQ(result.config.streaming.port, 7000);
+        EXPECT_EQ(result.config.streaming.tcp.port, 7000);
     }
 
     void testDisableCaptureFlag() {
@@ -80,6 +83,40 @@ namespace {
 
         EXPECT_TRUE(result.parsed());
         EXPECT_FALSE(result.config.capture.enabled);
+    }
+
+    void testEnableTcpStreamingFlag() {
+        char executable[] = "EdgeVision";
+        char tcpFlag[] = "--enable-tcp-streaming";
+        char* argv[] = {executable, tcpFlag};
+
+        const auto result = parseCommandLine(2, argv);
+
+        EXPECT_TRUE(result.parsed());
+        EXPECT_TRUE(result.config.streaming.tcp.enabled);
+    }
+
+    void testDisableWebRtcFlag() {
+        char executable[] = "EdgeVision";
+        char webrtcFlag[] = "--disable-webrtc";
+        char* argv[] = {executable, webrtcFlag};
+
+        const auto result = parseCommandLine(2, argv);
+
+        EXPECT_TRUE(result.parsed());
+        EXPECT_FALSE(result.config.streaming.webrtc.enabled);
+    }
+
+    void testWebRtcPortOverride() {
+        char executable[] = "EdgeVision";
+        char portFlag[] = "--webrtc-port";
+        char portValue[] = "6690";
+        char* argv[] = {executable, portFlag, portValue};
+
+        const auto result = parseCommandLine(3, argv);
+
+        EXPECT_TRUE(result.parsed());
+        EXPECT_EQ(result.config.streaming.webrtc.signallingPort, std::uint16_t{6690});
     }
 
     void testReadPolicyGreedyOverride() {
@@ -132,7 +169,10 @@ namespace {
 
     void testCustomDefaultsArePreserved() {
         AppConfig defaults{};
-        defaults.streaming.port = 9000;
+        defaults.streaming.tcp.enabled = true;
+        defaults.streaming.tcp.port = 9000;
+        defaults.streaming.webrtc.enabled = false;
+        defaults.streaming.webrtc.signallingPort = 7777;
         defaults.capture.enabled = false;
         defaults.scene.readPolicy = SceneReadPolicy::Balanced;
         defaults.capture.runtime.captureTimeoutMs = 25;
@@ -150,7 +190,10 @@ namespace {
         const auto result = parseCommandLine(1, argv, defaults);
 
         EXPECT_TRUE(result.parsed());
-        EXPECT_EQ(result.config.streaming.port, 9000);
+        EXPECT_TRUE(result.config.streaming.tcp.enabled);
+        EXPECT_EQ(result.config.streaming.tcp.port, 9000);
+        EXPECT_FALSE(result.config.streaming.webrtc.enabled);
+        EXPECT_EQ(result.config.streaming.webrtc.signallingPort, std::uint16_t{7777});
         EXPECT_EQ(result.config.scene.readPolicy, SceneReadPolicy::Balanced);
         EXPECT_FALSE(result.config.capture.enabled);
         EXPECT_EQ(result.config.capture.runtime.captureTimeoutMs, 25);
@@ -205,6 +248,17 @@ namespace {
     void testInvalidPortFails() {
         char executable[] = "EdgeVision";
         char portFlag[] = "--port";
+        char portValue[] = "99999";
+        char* argv[] = {executable, portFlag, portValue};
+
+        const auto result = parseCommandLine(3, argv);
+
+        EXPECT_FALSE(result.parsed());
+    }
+
+    void testInvalidWebRtcPortFails() {
+        char executable[] = "EdgeVision";
+        char portFlag[] = "--webrtc-port";
         char portValue[] = "99999";
         char* argv[] = {executable, portFlag, portValue};
 
@@ -302,6 +356,9 @@ int main() {
     testDefaultsAreUsed();
     testPortOverride();
     testDisableCaptureFlag();
+    testEnableTcpStreamingFlag();
+    testDisableWebRtcFlag();
+    testWebRtcPortOverride();
     testReadPolicyGreedyOverride();
     testReadPolicyBalancedOverride();
     testViewerPolicyEventOverride();
@@ -311,6 +368,7 @@ int main() {
     testDebugFramesOverride();
     testExplicitDebugFramesBeatsEnableDebug();
     testInvalidPortFails();
+    testInvalidWebRtcPortFails();
     testMissingReadPolicyValueFails();
     testInvalidReadPolicyFails();
     testMissingViewerPolicyValueFails();

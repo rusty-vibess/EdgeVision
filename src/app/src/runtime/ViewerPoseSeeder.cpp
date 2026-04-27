@@ -30,7 +30,7 @@ namespace edgevision::app::runtime {
             const std::optional<edgevision::model::viewer::ViewerPose> viewerPose =
                 makeInitialViewerPose();
             if (viewerPose.has_value()) {
-                m_viewerPoseStore.update(*viewerPose);
+                static_cast<void>(m_viewerPoseStore.update(*viewerPose));
                 return true;
             }
 
