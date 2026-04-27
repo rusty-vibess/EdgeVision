@@ -68,6 +68,7 @@ endif()
 
 add_executable(EdgeVision
     src/main.cpp
+    src/app/src/runtime/ViewerDebugSession.cpp
     src/app/src/runtime/ViewerFrameDumper.cpp
     src/app/src/runtime/ViewerPoseSeeder.cpp
 )

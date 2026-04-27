@@ -1,5 +1,6 @@
 #include "app/runtime/ViewerFrameDumper.hpp"
 
+#include <cstdint>
 #include <fstream>
 #include <iomanip>
 #include <limits>
@@ -14,6 +15,8 @@
 namespace edgevision::app::runtime {
     namespace {
         constexpr auto kPollInterval = std::chrono::milliseconds(10);
+        constexpr std::uint64_t kFnvOffsetBasis = 14695981039346656037ull;
+        constexpr std::uint64_t kFnvPrime = 1099511628211ull;
 
         [[nodiscard]] std::filesystem::path makeOutputPath(
             const std::filesystem::path& outputDirectory,
@@ -23,6 +26,14 @@ namespace edgevision::app::runtime {
             filename << "viewer-output-" << std::setw(4) << std::setfill('0') << sequence
                      << ".ppm";
             return outputDirectory / filename.str();
+        }
+
+        void hashBytes(std::uint64_t& hash, const void* data, std::size_t byteCount) {
+            const auto* bytes = static_cast<const std::uint8_t*>(data);
+            for (std::size_t index = 0; index < byteCount; ++index) {
+                hash ^= bytes[index];
+                hash *= kFnvPrime;
+            }
         }
     } // namespace
 
@@ -38,28 +49,30 @@ namespace edgevision::app::runtime {
         : m_renderOutputStore(renderOutputStore),
           m_config(config),
           m_outputDirectory(std::move(outputDirectory)) {
-        if (m_config.maxFreshOutputs == 0) {
-            m_config.maxFreshOutputs = 1;
+        if (m_config.maxFrames == 0) {
+            m_config.maxFrames = 1;
         }
     }
 
-    bool ViewerFrameDumper::waitForConfiguredOutputs(std::chrono::milliseconds timeout) {
+    bool ViewerFrameDumper::waitForConfiguredOutputs(
+        std::chrono::milliseconds timeout,
+        const std::function<void()>& onTick
+    ) {
         const auto deadline = std::chrono::steady_clock::now() + timeout;
         while (std::chrono::steady_clock::now() < deadline) {
             if (!processNewOutputs()) {
                 return false;
             }
 
-            if (!m_observedFreshOutput) {
-                std::this_thread::sleep_for(kPollInterval);
-                continue;
+            if (onTick) {
+                onTick();
             }
 
-            if (!m_config.enabled) {
-                return true;
-            }
-
-            if (m_dumpedFreshOutputCount >= m_config.maxFreshOutputs) {
+            if (m_config.enabled) {
+                if (m_dumpedOutputCount >= m_config.maxFrames) {
+                    return true;
+                }
+            } else if (m_observedNonCachedOutput) {
                 return true;
             }
 
@@ -73,8 +86,12 @@ namespace edgevision::app::runtime {
         return m_config.enabled;
     }
 
-    std::size_t ViewerFrameDumper::dumpedFreshOutputCount() const {
-        return m_dumpedFreshOutputCount;
+    std::size_t ViewerFrameDumper::dumpedOutputCount() const {
+        return m_dumpedOutputCount;
+    }
+
+    std::size_t ViewerFrameDumper::skippedDuplicateCount() const {
+        return m_skippedDuplicateCount;
     }
 
     const std::filesystem::path& ViewerFrameDumper::outputDirectory() const {
@@ -90,11 +107,15 @@ namespace edgevision::app::runtime {
             }
 
             m_lastProcessedTimestamp = output.renderTimestamp;
-            if (output.stale || !output.hasRgb()) {
+            if (!output.hasRgb()) {
                 continue;
             }
 
-            if (!handleFreshOutput(output)) {
+            if (!m_config.enabled && output.cached) {
+                continue;
+            }
+
+            if (!handleOutput(output)) {
                 return false;
             }
         }
@@ -102,21 +123,54 @@ namespace edgevision::app::runtime {
         return true;
     }
 
-    bool ViewerFrameDumper::handleFreshOutput(
-        const edgevision::model::viewer::RenderOutput& output
-    ) {
-        m_observedFreshOutput = true;
-        if (!m_config.enabled || m_dumpedFreshOutputCount >= m_config.maxFreshOutputs) {
+    bool ViewerFrameDumper::handleOutput(const edgevision::model::viewer::RenderOutput& output) {
+        if (!m_config.enabled) {
+            m_observedNonCachedOutput = true;
             return true;
         }
 
-        const std::size_t nextSequence = m_dumpedFreshOutputCount + 1;
+        if (m_dumpedOutputCount >= m_config.maxFrames) {
+            return true;
+        }
+
+        if (output.imageSize.width <= 0 || output.imageSize.height <= 0) {
+            return false;
+        }
+
+        const std::size_t expectedByteCount = static_cast<std::size_t>(output.imageSize.width)
+            * static_cast<std::size_t>(output.imageSize.height) * 3;
+        if (output.rgb.byteCount < expectedByteCount) {
+            return false;
+        }
+
+        const std::uint64_t outputHash = hashOutput(output);
+        if (m_hasLastDumpedHash && outputHash == m_lastDumpedHash) {
+            ++m_skippedDuplicateCount;
+            return true;
+        }
+
+        const std::size_t nextSequence = m_dumpedOutputCount + 1;
         if (!writeOutput(output, nextSequence)) {
             return false;
         }
 
-        ++m_dumpedFreshOutputCount;
+        m_lastDumpedHash = outputHash;
+        m_hasLastDumpedHash = true;
+        ++m_dumpedOutputCount;
         return true;
+    }
+
+    std::uint64_t ViewerFrameDumper::hashOutput(
+        const edgevision::model::viewer::RenderOutput& output
+    ) const {
+        std::uint64_t hash = kFnvOffsetBasis;
+        hashBytes(hash, &output.imageSize.width, sizeof(output.imageSize.width));
+        hashBytes(hash, &output.imageSize.height, sizeof(output.imageSize.height));
+
+        const std::size_t expectedByteCount = static_cast<std::size_t>(output.imageSize.width)
+            * static_cast<std::size_t>(output.imageSize.height) * 3;
+        hashBytes(hash, output.rgb.data, expectedByteCount);
+        return hash;
     }
 
     bool ViewerFrameDumper::writeOutput(

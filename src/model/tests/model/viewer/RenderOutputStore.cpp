@@ -65,7 +65,7 @@ namespace {
         output.poseGeneration = poseGeneration;
         output.sceneVersionId = sceneVersionId;
         output.renderTimestamp = std::chrono::steady_clock::now();
-        output.stale = false;
+        output.cached = false;
         return output;
     }
 

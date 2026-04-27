@@ -136,14 +136,14 @@ namespace edgevision::viewer {
     void SceneViewerRunner::recordOutput(const edgevision::model::viewer::RenderOutput& output) {
         std::lock_guard<std::mutex> lock(m_statusMutex);
         ++m_status.publishedOutputCount;
-        if (output.stale) {
-            ++m_status.staleOutputCount;
+        if (output.cached) {
+            ++m_status.cachedOutputCount;
         }
 
         m_status.activity = SceneViewerRunnerActivity::RenderedOutput;
         m_status.lastPoseGeneration = output.poseGeneration;
         m_status.lastSceneVersionId = output.sceneVersionId;
-        m_status.lastOutputWasStale = output.stale;
+        m_status.lastOutputWasCached = output.cached;
     }
 
     void SceneViewerRunner::setRunning(bool running) {

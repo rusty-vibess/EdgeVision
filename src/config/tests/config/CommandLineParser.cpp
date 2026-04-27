@@ -56,7 +56,7 @@ namespace {
         EXPECT_EQ(result.config.viewer.loopPeriodMs, 33);
         EXPECT_EQ(result.config.viewer.outputHistoryCapacity, std::size_t{8});
         EXPECT_FALSE(result.config.debug.viewerDump.enabled);
-        EXPECT_EQ(result.config.debug.viewerDump.maxFreshOutputs, std::size_t{1});
+        EXPECT_EQ(result.config.debug.viewerDump.maxFrames, std::size_t{1});
     }
 
     void testPortOverride() {
@@ -142,7 +142,7 @@ namespace {
         defaults.viewer.loopPeriodMs = 17;
         defaults.viewer.outputHistoryCapacity = 3;
         defaults.debug.viewerDump.enabled = true;
-        defaults.debug.viewerDump.maxFreshOutputs = 5;
+        defaults.debug.viewerDump.maxFrames = 5;
 
         char executable[] = "EdgeVision";
         char* argv[] = {executable};
@@ -160,7 +160,7 @@ namespace {
         EXPECT_EQ(result.config.viewer.loopPeriodMs, 17);
         EXPECT_EQ(result.config.viewer.outputHistoryCapacity, std::size_t{3});
         EXPECT_TRUE(result.config.debug.viewerDump.enabled);
-        EXPECT_EQ(result.config.debug.viewerDump.maxFreshOutputs, std::size_t{5});
+        EXPECT_EQ(result.config.debug.viewerDump.maxFrames, std::size_t{5});
     }
 
     void testEnableDebugFlagUsesDefaultViewerDumpCount() {
@@ -172,12 +172,12 @@ namespace {
 
         EXPECT_TRUE(result.parsed());
         EXPECT_TRUE(result.config.debug.viewerDump.enabled);
-        EXPECT_EQ(result.config.debug.viewerDump.maxFreshOutputs, std::size_t{5});
+        EXPECT_EQ(result.config.debug.viewerDump.maxFrames, std::size_t{5});
     }
 
-    void testDumpViewerFramesOverride() {
+    void testDebugFramesOverride() {
         char executable[] = "EdgeVision";
-        char dumpFlag[] = "--dump-viewer-frames";
+        char dumpFlag[] = "--debug-frames";
         char dumpValue[] = "10";
         char* argv[] = {executable, dumpFlag, dumpValue};
 
@@ -185,12 +185,12 @@ namespace {
 
         EXPECT_TRUE(result.parsed());
         EXPECT_TRUE(result.config.debug.viewerDump.enabled);
-        EXPECT_EQ(result.config.debug.viewerDump.maxFreshOutputs, std::size_t{10});
+        EXPECT_EQ(result.config.debug.viewerDump.maxFrames, std::size_t{10});
     }
 
-    void testExplicitDumpViewerFramesBeatsEnableDebug() {
+    void testExplicitDebugFramesBeatsEnableDebug() {
         char executable[] = "EdgeVision";
-        char dumpFlag[] = "--dump-viewer-frames";
+        char dumpFlag[] = "--debug-frames";
         char dumpValue[] = "10";
         char debugFlag[] = "--enable-debug";
         char* argv[] = {executable, dumpFlag, dumpValue, debugFlag};
@@ -199,7 +199,7 @@ namespace {
 
         EXPECT_TRUE(result.parsed());
         EXPECT_TRUE(result.config.debug.viewerDump.enabled);
-        EXPECT_EQ(result.config.debug.viewerDump.maxFreshOutputs, std::size_t{10});
+        EXPECT_EQ(result.config.debug.viewerDump.maxFrames, std::size_t{10});
     }
 
     void testInvalidPortFails() {
@@ -255,9 +255,9 @@ namespace {
         EXPECT_FALSE(result.parsed());
     }
 
-    void testMissingDumpViewerFramesValueFails() {
+    void testMissingDebugFramesValueFails() {
         char executable[] = "EdgeVision";
-        char dumpFlag[] = "--dump-viewer-frames";
+        char dumpFlag[] = "--debug-frames";
         char* argv[] = {executable, dumpFlag};
 
         const auto result = parseCommandLine(2, argv);
@@ -265,10 +265,21 @@ namespace {
         EXPECT_FALSE(result.parsed());
     }
 
-    void testInvalidDumpViewerFramesValueFails() {
+    void testInvalidDebugFramesValueFails() {
+        char executable[] = "EdgeVision";
+        char dumpFlag[] = "--debug-frames";
+        char dumpValue[] = "0";
+        char* argv[] = {executable, dumpFlag, dumpValue};
+
+        const auto result = parseCommandLine(3, argv);
+
+        EXPECT_FALSE(result.parsed());
+    }
+
+    void testLegacyDumpViewerFramesFlagFails() {
         char executable[] = "EdgeVision";
         char dumpFlag[] = "--dump-viewer-frames";
-        char dumpValue[] = "0";
+        char dumpValue[] = "10";
         char* argv[] = {executable, dumpFlag, dumpValue};
 
         const auto result = parseCommandLine(3, argv);
@@ -297,15 +308,16 @@ int main() {
     testViewerPolicyHotLoopOverride();
     testCustomDefaultsArePreserved();
     testEnableDebugFlagUsesDefaultViewerDumpCount();
-    testDumpViewerFramesOverride();
-    testExplicitDumpViewerFramesBeatsEnableDebug();
+    testDebugFramesOverride();
+    testExplicitDebugFramesBeatsEnableDebug();
     testInvalidPortFails();
     testMissingReadPolicyValueFails();
     testInvalidReadPolicyFails();
     testMissingViewerPolicyValueFails();
     testInvalidViewerPolicyFails();
-    testMissingDumpViewerFramesValueFails();
-    testInvalidDumpViewerFramesValueFails();
+    testMissingDebugFramesValueFails();
+    testInvalidDebugFramesValueFails();
+    testLegacyDumpViewerFramesFlagFails();
     testUnknownArgumentFails();
 
     if (gFailures != 0) {
