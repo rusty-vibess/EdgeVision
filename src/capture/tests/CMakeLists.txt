@@ -29,6 +29,10 @@ add_executable(capture_frame_ingestor_tests
     capture/frame/FrameIngestor.cpp
 )
 
+target_include_directories(capture_frame_ingestor_tests PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/frame/include
+)
+
 target_link_libraries(capture_frame_ingestor_tests PRIVATE capture)
 
 add_test(NAME capture_frame_ingestor_unit_tests COMMAND capture_frame_ingestor_tests)

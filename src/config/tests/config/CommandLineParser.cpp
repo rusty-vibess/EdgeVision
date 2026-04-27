@@ -5,6 +5,8 @@
 namespace {
     using edgevision::config::AppConfig;
     using edgevision::config::parseCommandLine;
+    using edgevision::config::SceneReadPolicy;
+    using edgevision::config::ViewerLoopPolicy;
 
     int gFailures = 0;
 
@@ -45,8 +47,16 @@ namespace {
         const auto result = parseCommandLine(1, argv);
 
         EXPECT_TRUE(result.parsed());
-        EXPECT_EQ(result.config.render.port, 6688);
-        EXPECT_FALSE(result.config.capture.enabled);
+        EXPECT_EQ(result.config.streaming.port, 6688);
+        EXPECT_EQ(result.config.scene.readPolicy, SceneReadPolicy::Greedy);
+        EXPECT_TRUE(result.config.capture.enabled);
+        EXPECT_EQ(result.config.builder.readyFrameTimeoutMs, 50);
+        EXPECT_TRUE(result.config.builder.trackerConfig.empty());
+        EXPECT_EQ(result.config.viewer.loopPolicy, ViewerLoopPolicy::Event);
+        EXPECT_EQ(result.config.viewer.loopPeriodMs, 33);
+        EXPECT_EQ(result.config.viewer.outputHistoryCapacity, std::size_t{8});
+        EXPECT_FALSE(result.config.debug.viewerDump.enabled);
+        EXPECT_EQ(result.config.debug.viewerDump.maxFrames, std::size_t{1});
     }
 
     void testPortOverride() {
@@ -58,35 +68,138 @@ namespace {
         const auto result = parseCommandLine(3, argv);
 
         EXPECT_TRUE(result.parsed());
-        EXPECT_EQ(result.config.render.port, 7000);
+        EXPECT_EQ(result.config.streaming.port, 7000);
     }
 
-    void testEnableCaptureFlag() {
+    void testDisableCaptureFlag() {
         char executable[] = "EdgeVision";
-        char captureFlag[] = "--enable-capture";
+        char captureFlag[] = "--disable-capture";
         char* argv[] = {executable, captureFlag};
 
         const auto result = parseCommandLine(2, argv);
 
         EXPECT_TRUE(result.parsed());
-        EXPECT_TRUE(result.config.capture.enabled);
+        EXPECT_FALSE(result.config.capture.enabled);
+    }
+
+    void testReadPolicyGreedyOverride() {
+        char executable[] = "EdgeVision";
+        char readPolicyFlag[] = "--read-policy";
+        char readPolicyValue[] = "greedy";
+        char* argv[] = {executable, readPolicyFlag, readPolicyValue};
+
+        const auto result = parseCommandLine(3, argv);
+
+        EXPECT_TRUE(result.parsed());
+        EXPECT_EQ(result.config.scene.readPolicy, SceneReadPolicy::Greedy);
+    }
+
+    void testReadPolicyBalancedOverride() {
+        char executable[] = "EdgeVision";
+        char readPolicyFlag[] = "--read-policy";
+        char readPolicyValue[] = "balanced";
+        char* argv[] = {executable, readPolicyFlag, readPolicyValue};
+
+        const auto result = parseCommandLine(3, argv);
+
+        EXPECT_TRUE(result.parsed());
+        EXPECT_EQ(result.config.scene.readPolicy, SceneReadPolicy::Balanced);
+    }
+
+    void testViewerPolicyEventOverride() {
+        char executable[] = "EdgeVision";
+        char viewerPolicyFlag[] = "--viewer-policy";
+        char viewerPolicyValue[] = "event";
+        char* argv[] = {executable, viewerPolicyFlag, viewerPolicyValue};
+
+        const auto result = parseCommandLine(3, argv);
+
+        EXPECT_TRUE(result.parsed());
+        EXPECT_EQ(result.config.viewer.loopPolicy, ViewerLoopPolicy::Event);
+    }
+
+    void testViewerPolicyHotLoopOverride() {
+        char executable[] = "EdgeVision";
+        char viewerPolicyFlag[] = "--viewer-policy";
+        char viewerPolicyValue[] = "hot-loop";
+        char* argv[] = {executable, viewerPolicyFlag, viewerPolicyValue};
+
+        const auto result = parseCommandLine(3, argv);
+
+        EXPECT_TRUE(result.parsed());
+        EXPECT_EQ(result.config.viewer.loopPolicy, ViewerLoopPolicy::HotLoop);
     }
 
     void testCustomDefaultsArePreserved() {
         AppConfig defaults{};
-        defaults.render.port = 9000;
+        defaults.streaming.port = 9000;
+        defaults.capture.enabled = false;
+        defaults.scene.readPolicy = SceneReadPolicy::Balanced;
         defaults.capture.runtime.captureTimeoutMs = 25;
+        defaults.builder.readyFrameTimeoutMs = 7;
+        defaults.builder.trackerConfig = "type=forcefail";
+        defaults.viewer.loopPolicy = ViewerLoopPolicy::HotLoop;
+        defaults.viewer.loopPeriodMs = 17;
+        defaults.viewer.outputHistoryCapacity = 3;
+        defaults.debug.viewerDump.enabled = true;
+        defaults.debug.viewerDump.maxFrames = 5;
 
         char executable[] = "EdgeVision";
-        char captureFlag[] = "--enable-capture";
-        char* argv[] = {executable, captureFlag};
+        char* argv[] = {executable};
 
-        const auto result = parseCommandLine(2, argv, defaults);
+        const auto result = parseCommandLine(1, argv, defaults);
 
         EXPECT_TRUE(result.parsed());
-        EXPECT_EQ(result.config.render.port, 9000);
-        EXPECT_TRUE(result.config.capture.enabled);
+        EXPECT_EQ(result.config.streaming.port, 9000);
+        EXPECT_EQ(result.config.scene.readPolicy, SceneReadPolicy::Balanced);
+        EXPECT_FALSE(result.config.capture.enabled);
         EXPECT_EQ(result.config.capture.runtime.captureTimeoutMs, 25);
+        EXPECT_EQ(result.config.builder.readyFrameTimeoutMs, 7);
+        EXPECT_EQ(result.config.builder.trackerConfig, defaults.builder.trackerConfig);
+        EXPECT_EQ(result.config.viewer.loopPolicy, ViewerLoopPolicy::HotLoop);
+        EXPECT_EQ(result.config.viewer.loopPeriodMs, 17);
+        EXPECT_EQ(result.config.viewer.outputHistoryCapacity, std::size_t{3});
+        EXPECT_TRUE(result.config.debug.viewerDump.enabled);
+        EXPECT_EQ(result.config.debug.viewerDump.maxFrames, std::size_t{5});
+    }
+
+    void testEnableDebugFlagUsesDefaultViewerDumpCount() {
+        char executable[] = "EdgeVision";
+        char debugFlag[] = "--enable-debug";
+        char* argv[] = {executable, debugFlag};
+
+        const auto result = parseCommandLine(2, argv);
+
+        EXPECT_TRUE(result.parsed());
+        EXPECT_TRUE(result.config.debug.viewerDump.enabled);
+        EXPECT_EQ(result.config.debug.viewerDump.maxFrames, std::size_t{5});
+    }
+
+    void testDebugFramesOverride() {
+        char executable[] = "EdgeVision";
+        char dumpFlag[] = "--debug-frames";
+        char dumpValue[] = "10";
+        char* argv[] = {executable, dumpFlag, dumpValue};
+
+        const auto result = parseCommandLine(3, argv);
+
+        EXPECT_TRUE(result.parsed());
+        EXPECT_TRUE(result.config.debug.viewerDump.enabled);
+        EXPECT_EQ(result.config.debug.viewerDump.maxFrames, std::size_t{10});
+    }
+
+    void testExplicitDebugFramesBeatsEnableDebug() {
+        char executable[] = "EdgeVision";
+        char dumpFlag[] = "--debug-frames";
+        char dumpValue[] = "10";
+        char debugFlag[] = "--enable-debug";
+        char* argv[] = {executable, dumpFlag, dumpValue, debugFlag};
+
+        const auto result = parseCommandLine(4, argv);
+
+        EXPECT_TRUE(result.parsed());
+        EXPECT_TRUE(result.config.debug.viewerDump.enabled);
+        EXPECT_EQ(result.config.debug.viewerDump.maxFrames, std::size_t{10});
     }
 
     void testInvalidPortFails() {
@@ -94,6 +207,80 @@ namespace {
         char portFlag[] = "--port";
         char portValue[] = "99999";
         char* argv[] = {executable, portFlag, portValue};
+
+        const auto result = parseCommandLine(3, argv);
+
+        EXPECT_FALSE(result.parsed());
+    }
+
+    void testMissingReadPolicyValueFails() {
+        char executable[] = "EdgeVision";
+        char readPolicyFlag[] = "--read-policy";
+        char* argv[] = {executable, readPolicyFlag};
+
+        const auto result = parseCommandLine(2, argv);
+
+        EXPECT_FALSE(result.parsed());
+    }
+
+    void testInvalidReadPolicyFails() {
+        char executable[] = "EdgeVision";
+        char readPolicyFlag[] = "--read-policy";
+        char readPolicyValue[] = "unknown";
+        char* argv[] = {executable, readPolicyFlag, readPolicyValue};
+
+        const auto result = parseCommandLine(3, argv);
+
+        EXPECT_FALSE(result.parsed());
+    }
+
+    void testMissingViewerPolicyValueFails() {
+        char executable[] = "EdgeVision";
+        char viewerPolicyFlag[] = "--viewer-policy";
+        char* argv[] = {executable, viewerPolicyFlag};
+
+        const auto result = parseCommandLine(2, argv);
+
+        EXPECT_FALSE(result.parsed());
+    }
+
+    void testInvalidViewerPolicyFails() {
+        char executable[] = "EdgeVision";
+        char viewerPolicyFlag[] = "--viewer-policy";
+        char viewerPolicyValue[] = "live";
+        char* argv[] = {executable, viewerPolicyFlag, viewerPolicyValue};
+
+        const auto result = parseCommandLine(3, argv);
+
+        EXPECT_FALSE(result.parsed());
+    }
+
+    void testMissingDebugFramesValueFails() {
+        char executable[] = "EdgeVision";
+        char dumpFlag[] = "--debug-frames";
+        char* argv[] = {executable, dumpFlag};
+
+        const auto result = parseCommandLine(2, argv);
+
+        EXPECT_FALSE(result.parsed());
+    }
+
+    void testInvalidDebugFramesValueFails() {
+        char executable[] = "EdgeVision";
+        char dumpFlag[] = "--debug-frames";
+        char dumpValue[] = "0";
+        char* argv[] = {executable, dumpFlag, dumpValue};
+
+        const auto result = parseCommandLine(3, argv);
+
+        EXPECT_FALSE(result.parsed());
+    }
+
+    void testLegacyDumpViewerFramesFlagFails() {
+        char executable[] = "EdgeVision";
+        char dumpFlag[] = "--dump-viewer-frames";
+        char dumpValue[] = "10";
+        char* argv[] = {executable, dumpFlag, dumpValue};
 
         const auto result = parseCommandLine(3, argv);
 
@@ -114,9 +301,23 @@ namespace {
 int main() {
     testDefaultsAreUsed();
     testPortOverride();
-    testEnableCaptureFlag();
+    testDisableCaptureFlag();
+    testReadPolicyGreedyOverride();
+    testReadPolicyBalancedOverride();
+    testViewerPolicyEventOverride();
+    testViewerPolicyHotLoopOverride();
     testCustomDefaultsArePreserved();
+    testEnableDebugFlagUsesDefaultViewerDumpCount();
+    testDebugFramesOverride();
+    testExplicitDebugFramesBeatsEnableDebug();
     testInvalidPortFails();
+    testMissingReadPolicyValueFails();
+    testInvalidReadPolicyFails();
+    testMissingViewerPolicyValueFails();
+    testInvalidViewerPolicyFails();
+    testMissingDebugFramesValueFails();
+    testInvalidDebugFramesValueFails();
+    testLegacyDumpViewerFramesFlagFails();
     testUnknownArgumentFails();
 
     if (gFailures != 0) {

@@ -24,8 +24,8 @@ namespace edgevision::model::frame {
                 return "invalid_depth_dimensions";
             case FrameSubmissionCode::InvalidIntrinsics:
                 return "invalid_intrinsics";
-            case FrameSubmissionCode::PacketQueueFull:
-                return "packet_queue_full";
+            case FrameSubmissionCode::ReadyFrameQueueFull:
+                return "ready_frame_queue_full";
             case FrameSubmissionCode::HistoryFull:
                 return "history_full";
         }

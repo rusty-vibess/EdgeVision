@@ -8,12 +8,12 @@ namespace edgevision::model::frame {
                 return "captured";
             case FrameLifecycleState::Stored:
                 return "stored";
-            case FrameLifecycleState::QueuedForFpga:
-                return "queued_for_fpga";
-            case FrameLifecycleState::SentToFpga:
-                return "sent_to_fpga";
-            case FrameLifecycleState::FusionResultReceived:
-                return "fusion_result_received";
+            case FrameLifecycleState::ReadyForConsumer:
+                return "ready_for_consumer";
+            case FrameLifecycleState::DispatchedToConsumer:
+                return "dispatched_to_consumer";
+            case FrameLifecycleState::Consumed:
+                return "consumed";
             case FrameLifecycleState::Dropped:
                 return "dropped";
             case FrameLifecycleState::Invalid:
@@ -25,13 +25,13 @@ namespace edgevision::model::frame {
         return "unknown";
     }
 
-    void FrameLifecycleTracker::recordAcceptedQueued(FrameId frameId) {
+    void FrameLifecycleTracker::recordAcceptedReady(FrameId frameId) {
         FrameLifecycle lifecycle{};
         lifecycle.frameId = frameId;
-        lifecycle.state = FrameLifecycleState::QueuedForFpga;
+        lifecycle.state = FrameLifecycleState::ReadyForConsumer;
         lifecycle.captured = true;
         lifecycle.stored = true;
-        lifecycle.queuedForFpga = true;
+        lifecycle.readyForConsumer = true;
         m_lifecyclesById[frameId] = lifecycle;
     }
 
@@ -48,14 +48,36 @@ namespace edgevision::model::frame {
         m_lifecyclesById[frameId] = lifecycle;
     }
 
-    void FrameLifecycleTracker::markSent(FrameId frameId) {
+    void FrameLifecycleTracker::markDispatched(FrameId frameId) {
         auto lifecycle = m_lifecyclesById.find(frameId);
         if (lifecycle == m_lifecyclesById.end()) {
             return;
         }
 
-        lifecycle->second.state = FrameLifecycleState::SentToFpga;
-        lifecycle->second.sentToFpga = true;
+        lifecycle->second.state = FrameLifecycleState::DispatchedToConsumer;
+        lifecycle->second.dispatchedToConsumer = true;
+    }
+
+    void FrameLifecycleTracker::markConsumed(FrameId frameId) {
+        auto lifecycle = m_lifecyclesById.find(frameId);
+        if (lifecycle == m_lifecyclesById.end()) {
+            return;
+        }
+
+        lifecycle->second.state = FrameLifecycleState::Consumed;
+        lifecycle->second.dispatchedToConsumer = true;
+        lifecycle->second.consumed = true;
+    }
+
+    void FrameLifecycleTracker::markFailed(FrameId frameId) {
+        auto lifecycle = m_lifecyclesById.find(frameId);
+        if (lifecycle == m_lifecyclesById.end()) {
+            return;
+        }
+
+        lifecycle->second.state = FrameLifecycleState::Failed;
+        lifecycle->second.dispatchedToConsumer = true;
+        lifecycle->second.failed = true;
     }
 
     void FrameLifecycleTracker::markDropped(FrameId frameId) {
@@ -68,15 +90,23 @@ namespace edgevision::model::frame {
         lifecycle->second.dropped = true;
     }
 
-    bool FrameLifecycleTracker::isPendingForFpga(FrameId frameId) const {
+    bool FrameLifecycleTracker::isReadyForConsumer(FrameId frameId) const {
         const auto lifecycle = m_lifecyclesById.find(frameId);
         if (lifecycle == m_lifecyclesById.end()) {
             return false;
         }
 
-        return lifecycle->second.queuedForFpga && !lifecycle->second.sentToFpga
-            && !lifecycle->second.dropped && !lifecycle->second.invalid
-            && !lifecycle->second.failed;
+        return lifecycle->second.state == FrameLifecycleState::ReadyForConsumer;
+    }
+
+    bool FrameLifecycleTracker::isProtectedFromEviction(FrameId frameId) const {
+        const auto lifecycle = m_lifecyclesById.find(frameId);
+        if (lifecycle == m_lifecyclesById.end()) {
+            return false;
+        }
+
+        return lifecycle->second.state == FrameLifecycleState::ReadyForConsumer
+            || lifecycle->second.state == FrameLifecycleState::DispatchedToConsumer;
     }
 
     std::optional<FrameLifecycle> FrameLifecycleTracker::get(FrameId frameId) const {

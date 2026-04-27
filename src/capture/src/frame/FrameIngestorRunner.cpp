@@ -1,15 +1,21 @@
 #include "capture/frame/FrameIngestorRunner.hpp"
 
 #include <chrono>
+#include <memory>
 #include <thread>
+
+#include "frame/state/FrameIngestor.hpp"
 
 namespace edgevision::capture::frame {
 
     FrameIngestorRunner::FrameIngestorRunner(
-        FrameIngestor& ingestor,
-        const edgevision::config::CaptureRuntimeConfig& config
+        edgevision::capture::CameraCapture& capture,
+        edgevision::model::frame::FrameStore& frameStore,
+        const edgevision::config::CaptureRuntimeConfig& config,
+        const edgevision::capture::K4aInterface& api
     )
-        : m_ingestor(ingestor), m_config(config) {}
+        : m_ingestor(std::make_unique<FrameIngestor>(capture, frameStore, api)),
+          m_config(config) {}
 
     FrameIngestorRunner::~FrameIngestorRunner() {
         requestStop();
@@ -51,7 +57,7 @@ namespace edgevision::capture::frame {
     void FrameIngestorRunner::runLoop() {
         while (!m_stopRequested.load()) {
             const FrameIngestResult result =
-                m_ingestor.captureAndSubmit(m_config.captureTimeoutMs);
+                m_ingestor->captureAndSubmit(m_config.captureTimeoutMs);
             recordResult(result);
 
             if (!result.submitted() && m_config.failureBackoffMs > 0) {

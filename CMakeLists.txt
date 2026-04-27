@@ -21,6 +21,10 @@ if(NOT IS_MULTI_CONFIG AND NOT CMAKE_BUILD_TYPE)
     message(STATUS "Defaulting CMAKE_BUILD_TYPE to Debug")
 endif()
 
+if(COMPILE_WITHOUT_CUDA)
+    message(FATAL_ERROR "EdgeVision Requires CUDA")
+endif()
+
 # ---- Sanitizers ----
 set(SANITIZE_FLAGS "-fsanitize=address,undefined -fno-omit-frame-pointer")
 
@@ -62,23 +66,39 @@ if(ENABLE_TESTS)
     enable_testing()
 endif()
 
-add_executable(EdgeVision src/main.cpp)
+add_executable(EdgeVision
+    src/main.cpp
+    src/app/src/runtime/ViewerDebugSession.cpp
+    src/app/src/runtime/ViewerFrameDumper.cpp
+    src/app/src/runtime/ViewerPoseSeeder.cpp
+)
+target_include_directories(EdgeVision PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/app/src/include
+)
 # third_party deps install
-list(APPEND CMAKE_PREFIX_PATH "/opt/jetson-sysroot-overlay/install")
+list(APPEND CMAKE_PREFIX_PATH "${SYSROOT_OVERLAY}/install")
 # Torch being lower in the superbuild caused strange issues hence find_package here
 find_package(Torch CONFIG REQUIRED)
 
 add_subdirectory(src/config)
 add_subdirectory(src/model)
+add_subdirectory(src/builder)
+add_subdirectory(src/viewer)
 add_subdirectory(src/capture)
 add_subdirectory(src/reconstruction)
 add_subdirectory(src/streaming)
 
+if(ENABLE_TESTS)
+    add_subdirectory(src/app/tests)
+endif()
+
 target_link_libraries(EdgeVision PRIVATE config)
+target_link_libraries(EdgeVision PRIVATE builder)
 target_link_libraries(EdgeVision PRIVATE capture)
 target_link_libraries(EdgeVision PRIVATE model)
 target_link_libraries(EdgeVision PRIVATE reconstruction)
 target_link_libraries(EdgeVision PRIVATE streaming)
+target_link_libraries(EdgeVision PRIVATE viewer)
 
 # ---- Bundle ----
 # Creates a self-contained bundle without affecting normal build/install
@@ -103,6 +123,8 @@ add_custom_target(bundle
     -D EDGEVISION_BUNDLE_DIR="${EDGEVISION_BUNDLE_DIR}"
     -D EDGEVISION_BINARY="$<TARGET_FILE:EdgeVision>"
     -D EDGEVISION_EXTRA_BINARIES="${_edgevision_bundle_extra_binaries}"
+    -D EDGEVISION_BUILD_TYPE="${CMAKE_BUILD_TYPE}"
+    -D EDGEVISION_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
     -P "${CMAKE_CURRENT_LIST_DIR}/cmake/bundle.cmake"
     DEPENDS EdgeVision
 )
