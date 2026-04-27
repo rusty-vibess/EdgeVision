@@ -11,5 +11,6 @@ clean-toolchain-tests:
 clean:
 	rm -rf build
 	rm -rf .cache
+	rm -rf build-rel*
 
 clean-all: clean clean-deps clean-toolchain-tests

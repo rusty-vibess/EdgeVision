@@ -9,9 +9,9 @@ namespace edgevision::model::scene {
     namespace {
         [[nodiscard]] bool canAcquireRead(const SharedSceneState& state) {
             switch (state.readPolicy) {
-                case SceneReadPolicy::Greedy:
+                case edgevision::config::SceneReadPolicy::Greedy:
                     return !state.writerActive;
-                case SceneReadPolicy::Balanced:
+                case edgevision::config::SceneReadPolicy::Balanced:
                     return !state.writerActive
                         && (state.waitingWriterCount == 0 || state.blockedPriorityReadPending);
             }

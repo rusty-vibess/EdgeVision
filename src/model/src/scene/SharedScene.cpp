@@ -7,8 +7,11 @@
 #include "scene/state/SharedSceneState.hpp"
 
 namespace edgevision::model::scene {
-    SharedScene::SharedScene(SceneReadPolicy readPolicy)
-        : m_state(std::make_shared<SharedSceneState>(readPolicy)) {}
+    SharedScene::SharedScene(const edgevision::config::SceneConfig& config)
+        : m_state(std::make_shared<SharedSceneState>(config.readPolicy)) {}
+
+    SharedScene::SharedScene(edgevision::config::SceneReadPolicy readPolicy)
+        : SharedScene(edgevision::config::SceneConfig{readPolicy}) {}
 
     SharedScene::~SharedScene() = default;
     SharedScene::SharedScene(SharedScene&& other) noexcept = default;
