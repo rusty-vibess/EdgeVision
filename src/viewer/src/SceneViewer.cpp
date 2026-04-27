@@ -53,7 +53,7 @@ namespace edgevision::viewer {
 
         const std::optional<edgevision::model::viewer::RenderOutput> latestOutput =
             m_renderOutputStore.latest();
-        output.stale = latestOutput.has_value()
+        output.cached = latestOutput.has_value()
             && latestOutput->poseGeneration == output.poseGeneration
             && latestOutput->sceneVersionId == output.sceneVersionId;
 

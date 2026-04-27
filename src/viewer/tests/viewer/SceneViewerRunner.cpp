@@ -208,12 +208,12 @@ namespace {
             "hot-loop runner should report rendered activity after publishing outputs"
         );
         expectTrue(
-            status.staleOutputCount > 0,
-            "hot-loop runner should mark repeated renders of unchanged inputs as stale"
+            status.cachedOutputCount > 0,
+            "hot-loop runner should mark repeated renders of unchanged inputs as cached"
         );
         expectTrue(
-            status.lastOutputWasStale,
-            "hot-loop runner should report stale output status after repeated rendering"
+            status.lastOutputWasCached,
+            "hot-loop runner should report cached output status after repeated rendering"
         );
     }
 } // namespace

@@ -31,3 +31,21 @@ target_link_libraries(app_viewer_frame_dumper_tests PRIVATE
 
 add_test(NAME app_viewer_frame_dumper_unit_tests COMMAND app_viewer_frame_dumper_tests)
 register_bundle_test(app_viewer_frame_dumper_tests)
+
+add_executable(app_viewer_debug_session_tests
+    runtime/ViewerDebugSession.cpp
+    ../src/runtime/ViewerDebugSession.cpp
+    ../src/runtime/ViewerFrameDumper.cpp
+)
+
+target_include_directories(app_viewer_debug_session_tests PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/include
+)
+
+target_link_libraries(app_viewer_debug_session_tests PRIVATE
+    config
+    model
+)
+
+add_test(NAME app_viewer_debug_session_unit_tests COMMAND app_viewer_debug_session_tests)
+register_bundle_test(app_viewer_debug_session_tests)

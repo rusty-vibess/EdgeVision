@@ -262,7 +262,9 @@ Perf is available on the Jetson form metric dumping.
 For gdb:
 
 ```bash
-sudo LD_LIBRARY_PATH="$PWD/lib" gdb --args ./bin/EdgeVision --enable-debug
+sudo LD_LIBRARY_PATH="$PWD/lib" gdb --args ./bin/EdgeVision --enable-debud --debug-frames 15
+# Run with perf stats
+sudo env LD_LIBRARY_PATH="$PWD/lib:${LD_LIBRARY_PATH:-}" perf stat -d ./bin/EdgeVision   --enable-debug   --viewer-policy hot-loop   --debug-frames 15
 ```
 
 ```gdb

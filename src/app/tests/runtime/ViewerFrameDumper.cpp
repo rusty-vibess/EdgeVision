@@ -71,7 +71,7 @@ namespace {
     RenderOutput makeOutput(
         ViewerPoseGeneration poseGeneration,
         SceneVersionId sceneVersionId,
-        bool stale,
+        bool cached,
         std::int64_t timestampTicks
     ) {
         RenderOutput output{};
@@ -81,7 +81,7 @@ namespace {
         output.sceneVersionId = sceneVersionId;
         output.renderTimestamp =
             std::chrono::steady_clock::time_point(std::chrono::milliseconds(timestampTicks));
-        output.stale = stale;
+        output.cached = cached;
         return output;
     }
 
@@ -102,13 +102,14 @@ namespace {
         return count;
     }
 
-    void testDisabledDumperWaitsForFirstFreshOutputWithoutWritingFiles() {
+    void testDisabledDumperWaitsForFirstNonCachedOutputWithoutWritingFiles() {
         const std::filesystem::path outputDirectory =
             makeTempDirectory("edgevision-viewer-frame-dumper-disabled");
         std::filesystem::remove_all(outputDirectory);
 
         RenderOutputStore store{4};
-        store.publish(makeOutput(1, 10, false, 1));
+        store.publish(makeOutput(1, 10, true, 1));
+        store.publish(makeOutput(2, 11, false, 2));
 
         ViewerDumpConfig config{};
         config.enabled = false;
@@ -116,10 +117,10 @@ namespace {
 
         expectTrue(
             dumper.waitForConfiguredOutputs(std::chrono::milliseconds(10)),
-            "disabled dumper should still observe the first fresh output"
+            "disabled dumper should still observe the first non-cached output"
         );
         expectEq(
-            dumper.dumpedFreshOutputCount(),
+            dumper.dumpedOutputCount(),
             std::size_t{0},
             "disabled dumper should not write any frames"
         );
@@ -130,7 +131,7 @@ namespace {
         );
     }
 
-    void testEnabledDumperWritesFirstFreshOutputsOnly() {
+    void testEnabledDumperWritesFirstOutputsIncludingCachedRepeats() {
         const std::filesystem::path outputDirectory =
             makeTempDirectory("edgevision-viewer-frame-dumper-enabled");
         std::filesystem::remove_all(outputDirectory);
@@ -142,28 +143,38 @@ namespace {
 
         ViewerDumpConfig config{};
         config.enabled = true;
-        config.maxFreshOutputs = 2;
+        config.maxFrames = 2;
         ViewerFrameDumper dumper(store, config, outputDirectory);
 
         expectTrue(
             dumper.waitForConfiguredOutputs(std::chrono::milliseconds(10)),
-            "enabled dumper should complete once the requested number of fresh outputs is dumped"
+            "enabled dumper should complete once the requested number of outputs is dumped"
         );
         expectEq(
-            dumper.dumpedFreshOutputCount(),
+            dumper.dumpedOutputCount(),
             std::size_t{2},
-            "enabled dumper should write only the requested number of fresh outputs"
+            "enabled dumper should write the requested number of outputs"
+        );
+        expectEq(
+            dumper.skippedDuplicateCount(),
+            std::size_t{1},
+            "enabled dumper should skip exact duplicate outputs"
         );
         expectEq(
             countFiles(outputDirectory),
             std::size_t{2},
-            "enabled dumper should create one file per dumped fresh output"
+            "enabled dumper should create one file per dumped output"
         );
 
         const std::filesystem::path firstOutput = outputDirectory / "viewer-output-0001.ppm";
+        const std::filesystem::path secondOutput = outputDirectory / "viewer-output-0002.ppm";
         expectTrue(
             std::filesystem::exists(firstOutput),
             "enabled dumper should create sequential ppm files"
+        );
+        expectTrue(
+            std::filesystem::exists(secondOutput),
+            "enabled dumper should continue dumping once a later distinct output arrives"
         );
 
         std::ifstream stream(firstOutput, std::ios::binary);
@@ -174,8 +185,8 @@ namespace {
 } // namespace
 
 int main() {
-    testDisabledDumperWaitsForFirstFreshOutputWithoutWritingFiles();
-    testEnabledDumperWritesFirstFreshOutputsOnly();
+    testDisabledDumperWaitsForFirstNonCachedOutputWithoutWritingFiles();
+    testEnabledDumperWritesFirstOutputsIncludingCachedRepeats();
 
     if (gFailures != 0) {
         std::cerr << "Tests failed: " << gFailures << '\n';

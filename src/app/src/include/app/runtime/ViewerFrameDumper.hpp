@@ -2,7 +2,9 @@
 
 #include <chrono>
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
+#include <functional>
 
 #include "config/types/debug.hpp"
 #include "model/viewer/types/output.hpp"
@@ -23,16 +25,21 @@ namespace edgevision::app::runtime {
             std::filesystem::path outputDirectory = defaultViewerDumpDirectory()
         );
 
-        [[nodiscard]] bool waitForConfiguredOutputs(std::chrono::milliseconds timeout);
+        [[nodiscard]] bool waitForConfiguredOutputs(
+            std::chrono::milliseconds timeout,
+            const std::function<void()>& onTick = {}
+        );
         [[nodiscard]] bool dumpingEnabled() const;
-        [[nodiscard]] std::size_t dumpedFreshOutputCount() const;
+        [[nodiscard]] std::size_t dumpedOutputCount() const;
+        [[nodiscard]] std::size_t skippedDuplicateCount() const;
         [[nodiscard]] const std::filesystem::path& outputDirectory() const;
 
       private:
         [[nodiscard]] bool processNewOutputs();
-        [[nodiscard]] bool handleFreshOutput(
+        [[nodiscard]] bool handleOutput(const edgevision::model::viewer::RenderOutput& output);
+        [[nodiscard]] std::uint64_t hashOutput(
             const edgevision::model::viewer::RenderOutput& output
-        );
+        ) const;
         [[nodiscard]] bool writeOutput(
             const edgevision::model::viewer::RenderOutput& output,
             std::size_t sequence
@@ -42,8 +49,11 @@ namespace edgevision::app::runtime {
         config::ViewerDumpConfig m_config{};
         std::filesystem::path m_outputDirectory{};
         std::chrono::steady_clock::time_point m_lastProcessedTimestamp{};
-        std::size_t m_dumpedFreshOutputCount = 0;
-        bool m_observedFreshOutput = false;
+        std::size_t m_dumpedOutputCount = 0;
+        std::size_t m_skippedDuplicateCount = 0;
+        std::uint64_t m_lastDumpedHash = 0;
+        bool m_hasLastDumpedHash = false;
+        bool m_observedNonCachedOutput = false;
     };
 
 } // namespace edgevision::app::runtime

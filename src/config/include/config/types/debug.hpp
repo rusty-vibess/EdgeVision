@@ -6,7 +6,7 @@ namespace edgevision::config {
 
     struct ViewerDumpConfig {
         bool enabled = false;
-        std::size_t maxFreshOutputs = 1;
+        std::size_t maxFrames = 1;
     };
 
     struct AppDebugConfig {

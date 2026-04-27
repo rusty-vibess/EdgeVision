@@ -116,7 +116,9 @@ namespace {
             sharedScene.version(),
             "render output should record the rendered scene version"
         );
-        expectTrue(!renderOutput->stale, "first render for a pose and scene should not be stale");
+        expectTrue(
+            !renderOutput->cached, "first render for a pose and scene should not be cached"
+        );
 
         const std::optional<RenderOutput> latestOutput = renderOutputStore.latest();
         expectTrue(
@@ -129,7 +131,7 @@ namespace {
         );
     }
 
-    void testRepeatedRenderOfUnchangedInputsMarksOutputStale() {
+    void testRepeatedRenderOfUnchangedInputsMarksOutputCached() {
         SharedScene sharedScene{edgevision::config::SceneReadPolicy::Balanced};
         SceneVersionStore sceneVersionStore{};
         const std::optional<PopulatedSceneData> data =
@@ -148,8 +150,8 @@ namespace {
         const std::optional<RenderOutput> repeatedOutput = viewer.renderPose(viewerPose);
         expectTrue(repeatedOutput.has_value(), "repeat render should still produce output");
         expectTrue(
-            repeatedOutput.has_value() && repeatedOutput->stale,
-            "repeat render with unchanged pose and scene should be marked stale"
+            repeatedOutput.has_value() && repeatedOutput->cached,
+            "repeat render with unchanged pose and scene should be marked cached"
         );
 
         const std::vector<RenderOutput> history = renderOutputStore.recent(4);
@@ -159,7 +161,7 @@ namespace {
 
 int main() {
     testRenderPosePublishesRgbOutput();
-    testRepeatedRenderOfUnchangedInputsMarksOutputStale();
+    testRepeatedRenderOfUnchangedInputsMarksOutputCached();
 
     if (gFailures != 0) {
         std::cerr << "Tests failed: " << gFailures << '\n';

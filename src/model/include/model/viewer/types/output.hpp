@@ -21,7 +21,7 @@ namespace edgevision::model::viewer {
         /// Local render completion timestamp.
         std::chrono::steady_clock::time_point renderTimestamp{};
         /// Whether this output repeated the latest pose+scene combination already published.
-        bool stale = false;
+        bool cached = false;
 
         /// Returns whether this output contains an RGB payload.
         [[nodiscard]] bool hasRgb() const {

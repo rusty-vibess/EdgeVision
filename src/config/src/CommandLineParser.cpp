@@ -90,7 +90,7 @@ namespace edgevision::config {
             if (arg == "--enable-debug") {
                 result.config.debug.viewerDump.enabled = true;
                 if (!viewerDumpCountExplicit) {
-                    result.config.debug.viewerDump.maxFreshOutputs = 5;
+                    result.config.debug.viewerDump.maxFrames = 5;
                 }
 
                 continue;
@@ -147,9 +147,9 @@ namespace edgevision::config {
                 continue;
             }
 
-            if (arg == "--dump-viewer-frames") {
+            if (arg == "--debug-frames") {
                 if (i + 1 >= argc) {
-                    result.error = "Missing value for --dump-viewer-frames";
+                    result.error = "Missing value for --debug-frames";
                     return result;
                 }
 
@@ -160,7 +160,7 @@ namespace edgevision::config {
                 }
 
                 result.config.debug.viewerDump.enabled = true;
-                result.config.debug.viewerDump.maxFreshOutputs = frameCount;
+                result.config.debug.viewerDump.maxFrames = frameCount;
                 viewerDumpCountExplicit = true;
                 ++i;
                 continue;
