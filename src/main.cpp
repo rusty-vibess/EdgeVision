@@ -1,7 +1,9 @@
 #include <algorithm>
 #include <chrono>
+#include <csignal>
 #include <iostream>
 #include <memory>
+#include <thread>
 
 #include "app/runtime/ViewerDebugSession.hpp"
 #include "app/runtime/ViewerPoseSeeder.hpp"
@@ -23,6 +25,11 @@ namespace {
 
     constexpr auto kViewerSeedTimeout = 30s;
     constexpr auto kViewerOutputTimeout = 30s;
+    volatile std::sig_atomic_t gShouldStop = 0;
+
+    void onTerminationSignal(int) {
+        gShouldStop = 1;
+    }
 } // namespace
 
 /// Usage: ./EdgeVision [--port 6688] [--enable-tcp-streaming]
@@ -41,9 +48,12 @@ int main(int argc, char* argv[]) {
 
     const edgevision::config::AppConfig appConfig = parseResult.config;
     if (!appConfig.capture.enabled) {
-        std::cerr << "Viewer smoke test requires capture to remain enabled" << std::endl;
+        std::cerr << "EdgeVision requires capture to remain enabled" << std::endl;
         return 1;
     }
+
+    std::signal(SIGINT, &onTerminationSignal);
+    std::signal(SIGTERM, &onTerminationSignal);
 
     // Import types
     edgevision::capture::CameraCapture camera{};
@@ -184,21 +194,20 @@ int main(int argc, char* argv[]) {
         std::cout << "Waiting to dump " << appConfig.debug.viewerDump.maxFrames
                   << " viewer frame(s) to " << viewerDebugSession.outputDirectory()
                   << " with metrics in " << viewerDebugSession.logPath() << "..." << std::endl;
-    } else {
-        std::cout << "Waiting for first non-cached viewer render output..." << std::endl;
-    }
-    if (!viewerDebugSession.waitForCompletion(kViewerOutputTimeout)) {
-        std::cerr << "Timed out waiting for viewer render outputs" << std::endl;
-        cleanup();
-        return 1;
-    }
+        if (!viewerDebugSession.waitForCompletion(kViewerOutputTimeout)) {
+            std::cerr << "Timed out waiting for viewer render outputs" << std::endl;
+            cleanup();
+            return 1;
+        }
 
-    if (viewerDebugSession.dumpingEnabled()) {
         std::cout << "Dumped " << viewerDebugSession.dumpedOutputCount() << " viewer frame(s) to "
                   << viewerDebugSession.outputDirectory() << " and wrote metrics to "
                   << viewerDebugSession.logPath() << std::endl;
     } else {
-        std::cout << "Observed first non-cached viewer render output" << std::endl;
+        std::cout << "EdgeVision running. Press Ctrl+C to stop." << std::endl;
+        while (gShouldStop == 0) {
+            std::this_thread::sleep_for(100ms);
+        }
     }
 
     cleanup();
