@@ -1,10 +1,15 @@
 #include "builder/state/SceneBuilder.hpp"
 
+#include <cstring>
+#include <cuda_runtime.h>
 #include <iostream>
 #include <optional>
 #include <source_location>
 #include <string_view>
+#include <vector>
 
+#include "ITMLib/Objects/Scene/ITMVoxelBlockHash.h"
+#include "builder/utils/InfiniTamViewConverter.hpp"
 #include "config/types/builder.hpp"
 #include "test_frames.hpp"
 
@@ -50,6 +55,127 @@ namespace {
         return index.getNumAllocatedVoxelBlocks() - scene.localVBA.lastFreeBlockId - 1;
     }
 
+    bool copyHashEntriesToHost(
+        const InfiniTamScene& scene,
+        std::vector<ITMHashEntry>& hostEntries
+    ) {
+        const std::size_t entryCount = static_cast<std::size_t>(scene.index.noTotalEntries);
+        hostEntries.resize(entryCount);
+
+        return cudaMemcpy(
+                   hostEntries.data(),
+                   scene.index.GetEntries(),
+                   entryCount * sizeof(ITMHashEntry),
+                   cudaMemcpyDeviceToHost
+               )
+            == cudaSuccess;
+    }
+
+    bool hashSceneLooksValid(const InfiniTamScene& scene) {
+        std::vector<ITMHashEntry> hostEntries{};
+        if (!copyHashEntriesToHost(scene, hostEntries)) {
+            return false;
+        }
+
+        std::size_t allocatedEntryCount = 0;
+        for (const ITMHashEntry& entry : hostEntries) {
+            if (entry.ptr < 0) {
+                continue;
+            }
+
+            if (entry.ptr >= SDF_LOCAL_BLOCK_NUM) {
+                return false;
+            }
+
+            ++allocatedEntryCount;
+            if (allocatedEntryCount > static_cast<std::size_t>(SDF_LOCAL_BLOCK_NUM)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    edgevision::model::frame::Frame makeSwizzleTestFrame() {
+        using namespace edgevision::model::frame;
+
+        constexpr int width = 17;
+        constexpr int height = 1;
+
+        std::vector<std::byte> rgbStorage(static_cast<std::size_t>(width) * 4);
+        for (int column = 0; column < width; ++column) {
+            const std::size_t offset = static_cast<std::size_t>(column) * 4;
+            rgbStorage[offset] = static_cast<std::byte>(10 + column);
+            rgbStorage[offset + 1] = static_cast<std::byte>(40 + column);
+            rgbStorage[offset + 2] = static_cast<std::byte>(70 + column);
+            rgbStorage[offset + 3] = static_cast<std::byte>(column);
+        }
+
+        std::vector<std::byte> depthStorage(static_cast<std::size_t>(width) * 2);
+        for (int column = 0; column < width; ++column) {
+            const std::uint16_t depthMillimetres = 1000;
+            std::memcpy(
+                depthStorage.data() + static_cast<std::size_t>(column) * sizeof(std::uint16_t),
+                &depthMillimetres,
+                sizeof(depthMillimetres)
+            );
+        }
+
+        Frame frame{};
+        frame.frameId = 7;
+        frame.timestamp = FrameTimestamp{700};
+        frame.rgb.size = ImageSize{width, height};
+        frame.rgb.strideBytes = width * 4;
+        frame.rgb.buffer = makeBuffer(std::move(rgbStorage));
+        frame.depth.size = ImageSize{width, height};
+        frame.depth.strideBytes = width * 2;
+        frame.depth.buffer = makeBuffer(std::move(depthStorage));
+        frame.intrinsics = CameraIntrinsics{525.0f, 525.0f, width / 2.0f, 0.5f};
+        return frame;
+    }
+
+    void testCopyFrameToViewSwizzlesBgraToOpaqueRgba() {
+        using namespace edgevision::model::frame;
+
+        const Frame frame = makeSwizzleTestFrame();
+        ITMLib::ITMView view(
+            makeRgbdCalib(frame),
+            Vector2i(frame.rgb.size.width, frame.rgb.size.height),
+            Vector2i(frame.depth.size.width, frame.depth.size.height),
+            false
+        );
+
+        const ViewConversionResult result = copyFrameToView(view, frame, MEMORYDEVICE_CPU);
+        expectTrue(result.converted(), "valid test frame should convert into an ITM view");
+        if (!result.converted()) {
+            return;
+        }
+
+        const Vector4u* rgbData = view.rgb->GetData(MEMORYDEVICE_CPU);
+        for (int column = 0; column < frame.rgb.size.width; ++column) {
+            expectEq(
+                rgbData[column].r,
+                static_cast<unsigned char>(70 + column),
+                "converted RGB image should place red in the first channel"
+            );
+            expectEq(
+                rgbData[column].g,
+                static_cast<unsigned char>(40 + column),
+                "converted RGB image should preserve green in the second channel"
+            );
+            expectEq(
+                rgbData[column].b,
+                static_cast<unsigned char>(10 + column),
+                "converted RGB image should place blue in the third channel"
+            );
+            expectEq(
+                rgbData[column].a,
+                static_cast<unsigned char>(255),
+                "converted RGB image should force alpha opaque"
+            );
+        }
+    }
+
     void testBootstrapFrameIntegratesPublishesAndStoresSceneVersion() {
         SharedScene sharedScene{};
         SceneVersionStore sceneVersionStore{};
@@ -86,6 +212,10 @@ namespace {
         expectTrue(
             usedBlockCount(readAccess.scene()) > 0,
             "successful build should allocate TSDF scene blocks"
+        );
+        expectTrue(
+            hashSceneLooksValid(readAccess.scene()),
+            "successful build should leave a structurally valid hash scene"
         );
     }
 
@@ -147,6 +277,7 @@ namespace {
 } // namespace
 
 int main() {
+    testCopyFrameToViewSwizzlesBgraToOpaqueRgba();
     testBootstrapFrameIntegratesPublishesAndStoresSceneVersion();
     testInvalidFrameLayoutFailsBeforePublish();
     testTrackingLossFailsWithoutPublishOrVersionWrite();

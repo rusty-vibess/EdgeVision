@@ -6,6 +6,7 @@
 #include <mutex>
 
 #include "ITMLib/Utils/ITMLibSettings.h"
+#include "config/types/scene.hpp"
 #include "model/scene/types/access.hpp"
 #include "model/scene/types/infinitam.hpp"
 
@@ -13,7 +14,7 @@ namespace edgevision::model::scene {
 
     class SharedSceneState final {
       public:
-        explicit SharedSceneState(SceneReadPolicy readPolicy);
+        explicit SharedSceneState(edgevision::config::SceneReadPolicy readPolicy);
 
         std::mutex mutex{};
         std::condition_variable condition{};
@@ -21,7 +22,8 @@ namespace edgevision::model::scene {
         std::size_t waitingWriterCount = 0;
         bool writerActive = false;
         bool blockedPriorityReadPending = false;
-        SceneReadPolicy readPolicy = SceneReadPolicy::Greedy;
+        edgevision::config::SceneReadPolicy readPolicy =
+            edgevision::config::SceneReadPolicy::Greedy;
         SceneVersionId sceneVersionId = 0;
         ITMLib::ITMLibSettings settings{};
         std::unique_ptr<InfiniTamScene> scene{};
