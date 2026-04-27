@@ -84,24 +84,29 @@ namespace {
         expectEq(recentFrames.size(), std::size_t{1}, "recent frame history should include frame");
         expectEq(recentFrames[0].frameId, FrameId{1}, "recent frame id should match submission");
 
-        const auto nextPacket = store.getNextFramePacket();
-        expectTrue(nextPacket.has_value(), "accepted frame should queue a packet");
-        expectEq(nextPacket->frameId, FrameId{1}, "queued packet id should match frame");
+        const auto nextFrame = store.tryDequeueReadyFrame();
+        expectTrue(nextFrame.has_value(), "accepted frame should become ready for the consumer");
+        expectEq(nextFrame->frameId, FrameId{1}, "ready frame id should match frame");
 
         const std::optional<FrameLifecycle> lifecycle = store.getFrameLifecycle(1);
         expectTrue(lifecycle.has_value(), "accepted frame should have lifecycle state");
         expectTrue(lifecycle->stored, "accepted lifecycle should record stored");
-        expectTrue(lifecycle->queuedForFpga, "accepted lifecycle should record queued_for_fpga");
+        expectTrue(
+            lifecycle->readyForConsumer, "accepted lifecycle should record ready_for_consumer"
+        );
         expectEq(
             lifecycle->state,
-            FrameLifecycleState::QueuedForFpga,
-            "accepted lifecycle state should be queued_for_fpga"
+            FrameLifecycleState::DispatchedToConsumer,
+            "dequeue should transition lifecycle state to dispatched_to_consumer"
+        );
+        expectTrue(
+            lifecycle->dispatchedToConsumer, "dequeue should record dispatched_to_consumer"
         );
 
         const FrameStoreStatus status = store.getStatus();
         expectEq(status.acceptedFrameCount, std::size_t{1}, "status should count acceptance");
         expectEq(status.rejectedFrameCount, std::size_t{0}, "status should not count rejection");
-        expectEq(status.queuedPacketCount, std::size_t{0}, "dequeue should consume queued packet");
+        expectEq(status.readyFrameCount, std::size_t{0}, "dequeue should consume ready frame");
         expectTrue(status.latestFrameId.has_value(), "status should expose latest frame id");
         expectEq(*status.latestFrameId, FrameId{1}, "status latest frame id should match");
     }
@@ -127,9 +132,9 @@ namespace {
         expectEq(latestFrame->frameId, FrameId{1}, "invalid frame should not replace latest");
         expectTrue(!store.getFrame(2).has_value(), "invalid frame should not enter lookup");
 
-        const auto nextPacket = store.getNextFramePacket();
-        expectTrue(nextPacket.has_value(), "existing packet should remain queued");
-        expectEq(nextPacket->frameId, FrameId{1}, "invalid frame should not queue a packet");
+        const auto nextFrame = store.tryDequeueReadyFrame();
+        expectTrue(nextFrame.has_value(), "existing ready frame should remain available");
+        expectEq(nextFrame->frameId, FrameId{1}, "invalid frame should not queue a frame");
 
         const FrameStoreStatus status = store.getStatus();
         expectEq(status.acceptedFrameCount, std::size_t{1}, "accepted count should remain one");
@@ -182,70 +187,81 @@ namespace {
         );
     }
 
-    void testPacketHandoffLifecycle() {
+    void testReadyFrameHandoffLifecycle() {
         FrameStore store(FrameStoreConfig{4, 4});
         expectTrue(store.submitFrame(makeFrame(1, 100)).accepted(), "frame 1 should submit");
         expectTrue(store.submitFrame(makeFrame(2, 200)).accepted(), "frame 2 should submit");
 
-        const auto firstPacket = store.getNextFramePacket();
-        expectTrue(firstPacket.has_value(), "first packet should be available");
-        expectEq(firstPacket->frameId, FrameId{1}, "packet queue should be oldest-first");
+        const auto firstFrame = store.tryDequeueReadyFrame();
+        expectTrue(firstFrame.has_value(), "first ready frame should be available");
+        expectEq(firstFrame->frameId, FrameId{1}, "ready frame queue should be oldest-first");
 
-        expectTrue(!store.markFramePacketSent(2), "cannot mark a non-dequeued packet sent");
-        expectTrue(store.markFramePacketSent(1), "first dequeued packet should mark sent");
+        expectTrue(!store.markFrameConsumed(2), "cannot consume a non-dequeued frame");
+        expectTrue(store.markFrameConsumed(1), "first dequeued frame should mark consumed");
 
-        const std::optional<FrameLifecycle> sentLifecycle = store.getFrameLifecycle(1);
-        expectTrue(sentLifecycle.has_value(), "sent frame lifecycle should be tracked");
-        expectTrue(sentLifecycle->sentToFpga, "lifecycle should record sent_to_fpga");
+        const std::optional<FrameLifecycle> consumedLifecycle = store.getFrameLifecycle(1);
+        expectTrue(consumedLifecycle.has_value(), "consumed frame lifecycle should be tracked");
+        expectTrue(
+            consumedLifecycle->dispatchedToConsumer,
+            "lifecycle should record dispatched_to_consumer"
+        );
+        expectTrue(consumedLifecycle->consumed, "lifecycle should record consumed");
         expectEq(
-            sentLifecycle->state,
-            FrameLifecycleState::SentToFpga,
-            "lifecycle state should be sent_to_fpga"
+            consumedLifecycle->state,
+            FrameLifecycleState::Consumed,
+            "lifecycle state should be consumed"
         );
 
-        const auto secondPacket = store.getNextFramePacket();
-        expectTrue(secondPacket.has_value(), "second packet should remain queued");
-        expectEq(secondPacket->frameId, FrameId{2}, "second packet should become queue front");
+        const auto secondFrame = store.tryDequeueReadyFrame();
+        expectTrue(secondFrame.has_value(), "second ready frame should remain queued");
+        expectEq(secondFrame->frameId, FrameId{2}, "second ready frame should become queue front");
 
-        expectTrue(store.markFramePacketSent(2), "second packet should mark sent");
-        expectTrue(!store.getNextFramePacket().has_value(), "packet queue should become empty");
+        expectTrue(store.markFrameFailed(2), "second frame should mark failed");
+        expectTrue(!store.tryDequeueReadyFrame().has_value(), "ready frame queue should be empty");
+
+        const std::optional<FrameLifecycle> failedLifecycle = store.getFrameLifecycle(2);
+        expectTrue(failedLifecycle.has_value(), "failed frame lifecycle should be tracked");
+        expectTrue(failedLifecycle->failed, "lifecycle should record failed");
+        expectEq(
+            failedLifecycle->state, FrameLifecycleState::Failed, "lifecycle state should be failed"
+        );
     }
 
-    void testPacketDequeueConsumes() {
+    void testReadyFrameDequeueConsumes() {
         FrameStore store(FrameStoreConfig{4, 4});
         expectTrue(store.submitFrame(makeFrame(1, 100)).accepted(), "frame 1 should submit");
         expectTrue(store.submitFrame(makeFrame(2, 200)).accepted(), "frame 2 should submit");
 
-        const auto firstPacket = store.getNextFramePacket();
-        const auto secondPacket = store.getNextFramePacket();
+        const auto firstFrame = store.tryDequeueReadyFrame();
+        const auto secondFrame = store.tryDequeueReadyFrame();
 
-        expectTrue(firstPacket.has_value(), "first packet dequeue should succeed");
-        expectTrue(secondPacket.has_value(), "second packet dequeue should succeed");
-        expectEq(firstPacket->frameId, FrameId{1}, "first dequeue should consume queue front");
+        expectTrue(firstFrame.has_value(), "first ready frame dequeue should succeed");
+        expectTrue(secondFrame.has_value(), "second ready frame dequeue should succeed");
+        expectEq(firstFrame->frameId, FrameId{1}, "first dequeue should consume queue front");
         expectEq(
-            secondPacket->frameId, FrameId{2}, "second dequeue should consume next queued packet"
+            secondFrame->frameId, FrameId{2}, "second dequeue should consume next ready frame"
         );
         expectEq(
-            store.getStatus().queuedPacketCount,
+            store.getStatus().readyFrameCount,
             std::size_t{0},
-            "dequeue should consume queued packets"
+            "dequeue should consume ready frames"
         );
 
-        expectTrue(store.markFramePacketSent(1), "first dequeued packet should mark sent");
-        expectTrue(store.markFramePacketSent(2), "second dequeued packet should mark sent");
-        expectTrue(!store.getNextFramePacket().has_value(), "packet queue should be empty");
+        expectTrue(store.markFrameConsumed(1), "first dequeued frame should mark consumed");
+        expectTrue(store.markFrameConsumed(2), "second dequeued frame should mark consumed");
+        expectTrue(!store.tryDequeueReadyFrame().has_value(), "ready frame queue should be empty");
     }
 
-    void testBlockingPacketDequeueWaitsForSubmission() {
+    void testBlockingReadyFrameDequeueWaitsForSubmission() {
         FrameStore store(FrameStoreConfig{4, 4});
         std::promise<void> consumerStarted{};
         std::future<void> started = consumerStarted.get_future();
         std::atomic<bool> consumerReturned = false;
-        std::optional<FramePacket> dequeuedPacket{};
+        std::optional<Frame> dequeuedFrame{};
 
-        std::thread consumer([&store, &consumerStarted, &consumerReturned, &dequeuedPacket]() {
+        std::thread consumer([&store, &consumerStarted, &consumerReturned, &dequeuedFrame]() {
             consumerStarted.set_value();
-            dequeuedPacket = store.waitForNextFramePacket();
+            dequeuedFrame = store.waitDequeueReadyFrame();
             consumerReturned.store(true);
         });
 
@@ -256,37 +272,78 @@ namespace {
         consumer.join();
 
         expectTrue(consumerReturned.load(), "blocking dequeue should return after submission");
-        expectTrue(dequeuedPacket.has_value(), "blocking dequeue should return a packet");
+        expectTrue(dequeuedFrame.has_value(), "blocking dequeue should return a frame");
         expectEq(
-            dequeuedPacket->frameId, FrameId{1}, "blocking dequeue should observe submitted frame"
+            dequeuedFrame->frameId, FrameId{1}, "blocking dequeue should observe submitted frame"
         );
         expectEq(
-            store.getStatus().queuedPacketCount,
+            store.getStatus().readyFrameCount,
             std::size_t{0},
-            "blocking dequeue should consume packet"
+            "blocking dequeue should consume ready frame"
         );
 
         const std::optional<FrameLifecycle> lifecycle = store.getFrameLifecycle(1);
-        expectTrue(lifecycle.has_value(), "dequeued packet lifecycle should be tracked");
+        expectTrue(lifecycle.has_value(), "dequeued frame lifecycle should be tracked");
         expectTrue(
-            lifecycle->queuedForFpga && !lifecycle->sentToFpga,
-            "blocking dequeue should not mark frame sent"
+            lifecycle->dispatchedToConsumer, "blocking dequeue should mark frame dispatched"
         );
-        expectTrue(store.markFramePacketSent(1), "dequeued packet should mark sent");
+        expectTrue(store.markFrameConsumed(1), "dequeued frame should mark consumed");
     }
 
-    void testBoundedHistoryEvictsSentFrames() {
+    void testTimedReadyFrameDequeueTimesOutWithoutMutation() {
+        FrameStore store(FrameStoreConfig{4, 4});
+
+        const std::optional<Frame> frame =
+            store.waitDequeueReadyFrame(std::chrono::milliseconds(1));
+        expectTrue(!frame.has_value(), "timed dequeue should return no frame on timeout");
+
+        const FrameStoreStatus status = store.getStatus();
+        expectEq(
+            status.acceptedFrameCount, std::size_t{0}, "timeout should not change accepted count"
+        );
+        expectEq(status.readyFrameCount, std::size_t{0}, "timeout should not change ready count");
+        expectTrue(!status.latestFrameId.has_value(), "timeout should not create a latest frame");
+    }
+
+    void testTimedReadyFrameDequeueReturnsFrameBeforeTimeout() {
+        FrameStore store(FrameStoreConfig{4, 4});
+        std::promise<void> consumerStarted{};
+        std::future<void> started = consumerStarted.get_future();
+        std::optional<Frame> dequeuedFrame{};
+
+        std::thread consumer([&store, &consumerStarted, &dequeuedFrame]() {
+            consumerStarted.set_value();
+            dequeuedFrame = store.waitDequeueReadyFrame(std::chrono::milliseconds(50));
+        });
+
+        started.wait();
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        expectTrue(store.submitFrame(makeFrame(1, 100)).accepted(), "frame 1 should submit");
+        consumer.join();
+
+        expectTrue(dequeuedFrame.has_value(), "timed dequeue should return a submitted frame");
+        expectEq(
+            dequeuedFrame->frameId, FrameId{1}, "timed dequeue should observe submitted frame"
+        );
+
+        const std::optional<FrameLifecycle> lifecycle = store.getFrameLifecycle(1);
+        expectTrue(lifecycle.has_value(), "timed dequeue should track frame lifecycle");
+        expectTrue(lifecycle->dispatchedToConsumer, "timed dequeue should mark frame dispatched");
+        expectTrue(store.markFrameConsumed(1), "timed dequeue should allow frame consumption");
+    }
+
+    void testBoundedHistoryEvictsTerminalFrames() {
         FrameStore store(FrameStoreConfig{2, 4});
         expectTrue(store.submitFrame(makeFrame(1, 100)).accepted(), "frame 1 should submit");
-        expectTrue(store.getNextFramePacket().has_value(), "frame 1 packet should dequeue");
-        expectTrue(store.markFramePacketSent(1), "frame 1 should mark sent");
+        expectTrue(store.tryDequeueReadyFrame().has_value(), "frame 1 should dequeue");
+        expectTrue(store.markFrameConsumed(1), "frame 1 should mark consumed");
         expectTrue(store.submitFrame(makeFrame(2, 200)).accepted(), "frame 2 should submit");
-        expectTrue(store.getNextFramePacket().has_value(), "frame 2 packet should dequeue");
-        expectTrue(store.markFramePacketSent(2), "frame 2 should mark sent");
+        expectTrue(store.tryDequeueReadyFrame().has_value(), "frame 2 should dequeue");
+        expectTrue(store.markFrameFailed(2), "frame 2 should mark failed");
         expectTrue(store.submitFrame(makeFrame(3, 300)).accepted(), "frame 3 should submit");
 
-        expectTrue(!store.getFrame(1).has_value(), "oldest sent frame should be evicted");
-        expectTrue(store.getFrame(2).has_value(), "recent sent frame should remain");
+        expectTrue(!store.getFrame(1).has_value(), "oldest terminal frame should be evicted");
+        expectTrue(store.getFrame(2).has_value(), "recent terminal frame should remain");
         expectTrue(store.getFrame(3).has_value(), "latest frame should remain");
 
         const auto recentFrames = store.getRecentFrames(5);
@@ -308,8 +365,8 @@ namespace {
 
         const auto returnedFrame = store.getLastFrame();
         expectTrue(returnedFrame.has_value(), "frame 1 should be readable");
-        expectTrue(store.getNextFramePacket().has_value(), "frame 1 packet should dequeue");
-        expectTrue(store.markFramePacketSent(1), "frame 1 should mark sent");
+        expectTrue(store.tryDequeueReadyFrame().has_value(), "frame 1 should dequeue");
+        expectTrue(store.markFrameConsumed(1), "frame 1 should mark consumed");
         expectTrue(store.submitFrame(makeFrame(2, 200)).accepted(), "frame 2 should submit");
 
         expectTrue(!store.getFrame(1).has_value(), "frame 1 should be evicted from store");
@@ -338,21 +395,37 @@ namespace {
             !store.getFrame(2).has_value(), "history-full rejection should not store frame"
         );
         expectEq(
-            store.getStatus().queuedPacketCount,
+            store.getStatus().readyFrameCount,
             std::size_t{1},
-            "history-full rejection should not queue packet"
+            "history-full rejection should not queue frame"
         );
     }
 
-    void testPacketQueueFullRejectsWithoutStateMutation() {
+    void testHistoryFullProtectsDispatchedFrames() {
+        FrameStore store(FrameStoreConfig{1, 2});
+        expectTrue(store.submitFrame(makeFrame(1, 100)).accepted(), "frame 1 should submit");
+        expectTrue(store.tryDequeueReadyFrame().has_value(), "frame 1 should dequeue");
+
+        const FrameSubmissionResult result = store.submitFrame(makeFrame(2, 200));
+        expectEq(
+            result.code,
+            FrameSubmissionCode::HistoryFull,
+            "store should not evict a dispatched in-flight frame"
+        );
+        expectTrue(
+            !store.getFrame(2).has_value(), "history-full rejection should not store frame"
+        );
+    }
+
+    void testReadyFrameQueueFullRejectsWithoutStateMutation() {
         FrameStore store(FrameStoreConfig{5, 1});
         expectTrue(store.submitFrame(makeFrame(1, 100)).accepted(), "frame 1 should submit");
 
         const FrameSubmissionResult result = store.submitFrame(makeFrame(2, 200));
         expectEq(
             result.code,
-            FrameSubmissionCode::PacketQueueFull,
-            "full packet queue should reject frame"
+            FrameSubmissionCode::ReadyFrameQueueFull,
+            "full ready frame queue should reject frame"
         );
         expectTrue(!store.getFrame(2).has_value(), "queue-full rejection should not store frame");
 
@@ -397,13 +470,16 @@ int main() {
     testInvalidFrameDoesNotPoisonStore();
     testOrderingValidation();
     testDimensionAndIntrinsicsValidation();
-    testPacketHandoffLifecycle();
-    testPacketDequeueConsumes();
-    testBlockingPacketDequeueWaitsForSubmission();
-    testBoundedHistoryEvictsSentFrames();
+    testReadyFrameHandoffLifecycle();
+    testReadyFrameDequeueConsumes();
+    testBlockingReadyFrameDequeueWaitsForSubmission();
+    testTimedReadyFrameDequeueTimesOutWithoutMutation();
+    testTimedReadyFrameDequeueReturnsFrameBeforeTimeout();
+    testBoundedHistoryEvictsTerminalFrames();
     testReturnedFrameSurvivesStoreEviction();
     testHistoryFullProtectsPendingFrames();
-    testPacketQueueFullRejectsWithoutStateMutation();
+    testHistoryFullProtectsDispatchedFrames();
+    testReadyFrameQueueFullRejectsWithoutStateMutation();
     testConcurrentReadSmoke();
 
     if (gFailures != 0) {

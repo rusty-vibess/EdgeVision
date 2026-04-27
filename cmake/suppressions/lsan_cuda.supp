@@ -1,0 +1,4 @@
+leak:libcuda.so.1
+leak:libcudart.so.12
+leak:libnvcucompat.so
+leak:cuInit

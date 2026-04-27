@@ -17,7 +17,7 @@ namespace edgevision::model::frame {
         InvalidRgbDimensions,
         InvalidDepthDimensions,
         InvalidIntrinsics,
-        PacketQueueFull,
+        ReadyFrameQueueFull,
         HistoryFull,
     };
 

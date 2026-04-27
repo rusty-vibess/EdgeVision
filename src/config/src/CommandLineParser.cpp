@@ -24,6 +24,50 @@ namespace edgevision::config {
             return true;
         }
 
+        [[nodiscard]] bool parseReadPolicy(std::string_view value, SceneReadPolicy& readPolicy) {
+            if (value == "greedy") {
+                readPolicy = SceneReadPolicy::Greedy;
+                return true;
+            }
+
+            if (value == "balanced") {
+                readPolicy = SceneReadPolicy::Balanced;
+                return true;
+            }
+
+            return false;
+        }
+
+        [[nodiscard]] bool parseViewerPolicy(
+            std::string_view value,
+            ViewerLoopPolicy& viewerLoopPolicy
+        ) {
+            if (value == "event") {
+                viewerLoopPolicy = ViewerLoopPolicy::Event;
+                return true;
+            }
+
+            if (value == "hot-loop") {
+                viewerLoopPolicy = ViewerLoopPolicy::HotLoop;
+                return true;
+            }
+
+            return false;
+        }
+
+        [[nodiscard]] bool parsePositiveCount(std::string_view value, std::size_t& count) {
+            const char* begin = value.data();
+            const char* end = begin + value.size();
+            std::size_t parsedCount = 0;
+            const std::from_chars_result result = std::from_chars(begin, end, parsedCount);
+            if (result.ec != std::errc{} || result.ptr != end || parsedCount == 0) {
+                return false;
+            }
+
+            count = parsedCount;
+            return true;
+        }
+
     } // namespace
 
     bool CommandLineParseResult::parsed() const {
@@ -33,12 +77,22 @@ namespace edgevision::config {
     CommandLineParseResult parseCommandLine(int argc, char* argv[], const AppConfig& defaults) {
         CommandLineParseResult result{};
         result.config = defaults;
+        bool viewerDumpCountExplicit = false;
 
         for (int i = 1; i < argc; ++i) {
             const std::string_view arg(argv[i]);
 
-            if (arg == "--enable-capture") {
-                result.config.capture.enabled = true;
+            if (arg == "--disable-capture") {
+                result.config.capture.enabled = false;
+                continue;
+            }
+
+            if (arg == "--enable-debug") {
+                result.config.debug.viewerDump.enabled = true;
+                if (!viewerDumpCountExplicit) {
+                    result.config.debug.viewerDump.maxFrames = 5;
+                }
+
                 continue;
             }
 
@@ -54,7 +108,60 @@ namespace edgevision::config {
                     return result;
                 }
 
-                result.config.render.port = port;
+                result.config.streaming.port = port;
+                ++i;
+                continue;
+            }
+
+            if (arg == "--read-policy") {
+                if (i + 1 >= argc) {
+                    result.error = "Missing value for --read-policy";
+                    return result;
+                }
+
+                SceneReadPolicy readPolicy = result.config.scene.readPolicy;
+                if (!parseReadPolicy(argv[i + 1], readPolicy)) {
+                    result.error = "Invalid read policy: " + std::string(argv[i + 1]);
+                    return result;
+                }
+
+                result.config.scene.readPolicy = readPolicy;
+                ++i;
+                continue;
+            }
+
+            if (arg == "--viewer-policy") {
+                if (i + 1 >= argc) {
+                    result.error = "Missing value for --viewer-policy";
+                    return result;
+                }
+
+                ViewerLoopPolicy viewerLoopPolicy = result.config.viewer.loopPolicy;
+                if (!parseViewerPolicy(argv[i + 1], viewerLoopPolicy)) {
+                    result.error = "Invalid viewer policy: " + std::string(argv[i + 1]);
+                    return result;
+                }
+
+                result.config.viewer.loopPolicy = viewerLoopPolicy;
+                ++i;
+                continue;
+            }
+
+            if (arg == "--debug-frames") {
+                if (i + 1 >= argc) {
+                    result.error = "Missing value for --debug-frames";
+                    return result;
+                }
+
+                std::size_t frameCount = 0;
+                if (!parsePositiveCount(argv[i + 1], frameCount)) {
+                    result.error = "Invalid viewer dump frame count: " + std::string(argv[i + 1]);
+                    return result;
+                }
+
+                result.config.debug.viewerDump.enabled = true;
+                result.config.debug.viewerDump.maxFrames = frameCount;
+                viewerDumpCountExplicit = true;
                 ++i;
                 continue;
             }

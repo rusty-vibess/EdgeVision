@@ -2,7 +2,7 @@
 
 namespace edgevision::config {
 
-    struct RenderConfig {
+    struct StreamingConfig {
         int port = 6688;
     };
 
