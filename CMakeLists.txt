@@ -87,6 +87,7 @@ add_subdirectory(src/viewer)
 add_subdirectory(src/capture)
 add_subdirectory(src/reconstruction)
 add_subdirectory(src/streaming)
+add_subdirectory(src/streaming/webrtc)
 
 if(ENABLE_TESTS)
     add_subdirectory(src/app/tests)
@@ -98,6 +99,7 @@ target_link_libraries(EdgeVision PRIVATE capture)
 target_link_libraries(EdgeVision PRIVATE model)
 target_link_libraries(EdgeVision PRIVATE reconstruction)
 target_link_libraries(EdgeVision PRIVATE streaming)
+target_link_libraries(EdgeVision PRIVATE streaming_webrtc)
 target_link_libraries(EdgeVision PRIVATE viewer)
 
 # ---- Bundle ----

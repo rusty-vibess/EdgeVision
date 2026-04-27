@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <chrono>
 #include <iostream>
+#include <memory>
 
 #include "app/runtime/ViewerDebugSession.hpp"
 #include "app/runtime/ViewerPoseSeeder.hpp"
@@ -14,6 +15,7 @@
 #include "model/scene/SharedScene.hpp"
 #include "model/viewer/RenderOutputStore.hpp"
 #include "model/viewer/ViewerPoseStore.hpp"
+#include "streaming/webrtc/WebRtcServer.hpp"
 #include "viewer/SceneViewerRunner.hpp"
 
 namespace {
@@ -23,7 +25,9 @@ namespace {
     constexpr auto kViewerOutputTimeout = 30s;
 } // namespace
 
-/// Usage: ./EdgeVision [--port 6688] [--disable-capture]
+/// Usage: ./EdgeVision [--port 6688] [--enable-tcp-streaming]
+///                      [--webrtc-port 6689] [--disable-webrtc]
+///                      [--disable-capture]
 ///                      [--read-policy greedy|balanced]
 ///                      [--viewer-policy event|hot-loop]
 ///                      [--enable-debug]
@@ -52,6 +56,7 @@ int main(int argc, char* argv[]) {
         appConfig.debug.viewerDump.enabled ? appConfig.debug.viewerDump.maxFrames : std::size_t{0}
     );
     edgevision::model::viewer::RenderOutputStore renderOutputStore{renderOutputHistoryCapacity};
+    std::unique_ptr<edgevision::streaming::webrtc::WebRtcServer> webRtcServer{};
 
     // Loop runners
     edgevision::capture::frame::FrameIngestorRunner frameIngestorRunner(
@@ -83,6 +88,10 @@ int main(int argc, char* argv[]) {
 
     // Cleanup inline util
     const auto cleanup = [&]() {
+        if (webRtcServer) {
+            webRtcServer->stop();
+        }
+
         sceneViewerRunner.requestStop();
         sceneViewerRunner.join();
         sceneBuilderRunner.requestStop();
@@ -142,6 +151,15 @@ int main(int argc, char* argv[]) {
         return 1;
     }
     std::cout << "Scene viewer runner started" << std::endl;
+
+    if (appConfig.streaming.webrtc.enabled) {
+        std::cout << "Starting WebRTC streaming on " << appConfig.streaming.webrtc.signallingHost
+                  << ':' << appConfig.streaming.webrtc.signallingPort << "..." << std::endl;
+        webRtcServer = edgevision::streaming::webrtc::startWebRtcServer(
+            appConfig.streaming.webrtc, viewerPoseStore, renderOutputStore
+        );
+        std::cout << "WebRTC streaming started" << std::endl;
+    }
 
     // Seed the initial viewer pose from the first built scene.
     std::cout << "Seeding initial viewer pose..." << std::endl;
