@@ -98,7 +98,9 @@ namespace edgevision::streaming::webrtc {
                 onOffer(sdp, std::move(reply));
             };
             callbacks.onIce = [this](const json& candidate) { onIceFromClient(candidate); };
-            callbacks.onClientConnected = [] {};
+            callbacks.onClientConnected = [this] {
+                static_cast<void>(m_viewerPoseStore.resetRelativeBaseline());
+            };
             callbacks.onClientDisconnected = [this] { onClientDisconnected(); };
 
             m_signalling = std::make_unique<SignallingHandler>(
@@ -276,11 +278,9 @@ namespace edgevision::streaming::webrtc {
         }
 
         void applyPoseUpdate(const PoseUpdate& pose) {
-            if (const auto nextPose =
-                    utils::makeUpdatedViewerPose(m_viewerPoseStore.latest(), pose);
-                nextPose.has_value()) {
-                static_cast<void>(m_viewerPoseStore.update(*nextPose));
-            }
+            edgevision::model::scene::Pose4f relativePose{};
+            relativePose.matrix = pose.matrix;
+            static_cast<void>(m_viewerPoseStore.applyRelativePose(relativePose));
         }
 
         void sendControlText(const std::string& text) {
