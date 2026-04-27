@@ -25,6 +25,7 @@ include(extern/json.cmake)
 include(extern/torch.cmake)
 include(extern/readerwriterqueue.cmake)
 include(extern/infinitam.cmake)
+include(extern/websocket.cmake)
 
 
 # ---- Apply third_party patches ----
