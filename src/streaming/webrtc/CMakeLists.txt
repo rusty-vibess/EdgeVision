@@ -1,8 +1,7 @@
 # ---- WebRTC streaming module ----
 # H.264 over webrtcbin + JSON signalling on a tiny WebSocket listener.
-# Designed for Jetson Orin Nano: 854x480@30, 1.5 Mbps, software x264enc
-# (Orin Nano has no NVENC). Default mode is TSDF-only; RGB lives on
-# the existing TCP RenderServer to keep within the single-stream budget.
+# The transport now consumes ViewerPoseStore + RenderOutputStore rather
+# than owning a parallel render path.
 #
 # Sysroot must include gstreamer1.0-plugins-ugly (provides x264enc) on
 # top of the standard gst-plugins-base/good/bad set already present on
@@ -27,8 +26,8 @@ pkg_check_modules(GSTREAMER REQUIRED IMPORTED_TARGET
 add_library(streaming_webrtc STATIC
     src/WebRtcServer.cpp
     src/PipelineBuilder.cpp
+    src/utils/PoseUpdateHandler.cpp
     src/SignallingHandler.cpp
-    src/FrameSource.cpp
 )
 set_target_properties(streaming_webrtc PROPERTIES
     CXX_STANDARD 17
@@ -38,7 +37,11 @@ target_include_directories(streaming_webrtc PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 target_include_directories(streaming_webrtc PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/include
     ${SYSROOT_OVERLAY}/install/include
+)
+target_compile_definitions(streaming_webrtc PUBLIC
+    GST_USE_UNSTABLE_API
 )
 target_compile_definitions(streaming_webrtc PRIVATE
     ASIO_STANDALONE
@@ -46,13 +49,12 @@ target_compile_definitions(streaming_webrtc PRIVATE
     _WEBSOCKETPP_CPP11_STL_
 )
 target_link_libraries(streaming_webrtc
-    PUBLIC  
+    PUBLIC
+        config
         PkgConfig::GSTREAMER
         nlohmann_json::nlohmann_json
-    PRIVATE 
-        capture
+    PRIVATE
         model
-        reconstruction
 )
 
 # ---- tests ------------------------------------------------------------

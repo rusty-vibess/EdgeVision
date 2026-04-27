@@ -19,14 +19,14 @@ namespace edgevision::model::viewer {
         ViewerPoseGeneration generation = 0;
     };
 
-    [[nodiscard]] constexpr bool operator==(const ViewerPose& lhs, const ViewerPose& rhs) {
+    [[nodiscard]] inline bool operator==(const ViewerPose& lhs, const ViewerPose& rhs) {
         return lhs.pose == rhs.pose && lhs.intrinsics.fx == rhs.intrinsics.fx
             && lhs.intrinsics.fy == rhs.intrinsics.fy && lhs.intrinsics.cx == rhs.intrinsics.cx
             && lhs.intrinsics.cy == rhs.intrinsics.cy && lhs.imageSize == rhs.imageSize
             && lhs.generation == rhs.generation;
     }
 
-    [[nodiscard]] constexpr bool operator!=(const ViewerPose& lhs, const ViewerPose& rhs) {
+    [[nodiscard]] inline bool operator!=(const ViewerPose& lhs, const ViewerPose& rhs) {
         return !(lhs == rhs);
     }
 

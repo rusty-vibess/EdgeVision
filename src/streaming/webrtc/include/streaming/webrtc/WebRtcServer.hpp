@@ -1,16 +1,14 @@
 #pragma once
 
 #include <cstdint>
-#include <functional>
 #include <memory>
-#include <thread>
-#include <vector>
 
-#include "streaming/webrtc/types/PoseUpdate.hpp"
-#include "streaming/webrtc/types/StreamConfig.hpp"
+#include "config/types/streaming.hpp"
 
-namespace edgevision::model::frame { class FrameStore; }
-namespace edgevision::model::scene { class SharedScene; }
+namespace edgevision::model::viewer {
+    class RenderOutputStore;
+    class ViewerPoseStore;
+} // namespace edgevision::model::viewer
 
 namespace edgevision::streaming::webrtc {
 
@@ -20,9 +18,9 @@ namespace edgevision::streaming::webrtc {
     class WebRtcServer {
       public:
         WebRtcServer(
-            StreamConfig config,
-            edgevision::model::frame::FrameStore& frameStore,
-            edgevision::model::scene::SharedScene& scene
+            edgevision::config::WebRtcStreamingConfig config,
+            edgevision::model::viewer::ViewerPoseStore& viewerPoseStore,
+            edgevision::model::viewer::RenderOutputStore& renderOutputStore
         );
         WebRtcServer(const WebRtcServer&) = delete;
         WebRtcServer& operator=(const WebRtcServer&) = delete;
@@ -31,23 +29,16 @@ namespace edgevision::streaming::webrtc {
         void start();
         void stop();
 
-        /// Wire George's TSDF raycaster. Call after start(); safe to call at
-        /// any time. Passing nullptr disables the TSDF track (black frames).
-        void setTsdfRenderer(
-            std::function<bool(const PoseUpdate&, std::vector<std::uint8_t>&)> renderer
-        );
-
       private:
         struct Impl;
         std::unique_ptr<Impl> m_impl;
     };
 
-    /// Convenience entry point for main.cpp. Returns a thread that owns
-    /// the server lifetime; join in main on shutdown signal.
+    /// Convenience entry point for main.cpp.
     [[nodiscard]] std::unique_ptr<WebRtcServer> startWebRtcServer(
-        StreamConfig config,
-        edgevision::model::frame::FrameStore& frameStore,
-        edgevision::model::scene::SharedScene& scene
+        edgevision::config::WebRtcStreamingConfig config,
+        edgevision::model::viewer::ViewerPoseStore& viewerPoseStore,
+        edgevision::model::viewer::RenderOutputStore& renderOutputStore
     );
 
 } // namespace edgevision::streaming::webrtc
