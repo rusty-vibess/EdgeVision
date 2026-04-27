@@ -1,4 +1,4 @@
-#include "capture/frame/FrameIngestor.hpp"
+#include "frame/state/FrameIngestor.hpp"
 
 #include <cstdint>
 #include <utility>

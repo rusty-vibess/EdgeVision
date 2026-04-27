@@ -36,7 +36,7 @@ namespace edgevision::builder {
     }
 
     void InfiniTamPipeline::ensurePipelineForScene(
-        const edgevision::model::scene::InfiniTamScene& scene,
+        edgevision::model::scene::InfiniTamScene& scene,
         const edgevision::model::frame::Frame& frame
     ) {
         if (!needsPipelineReset(frame)) {
@@ -102,9 +102,10 @@ namespace edgevision::builder {
     }
 
     void InfiniTamPipeline::resetPipeline(
-        const edgevision::model::scene::InfiniTamScene& scene,
+        edgevision::model::scene::InfiniTamScene& scene,
         const edgevision::model::frame::Frame& frame
     ) {
+        const bool shouldResetScene = !m_hasPipeline;
         const Vector2i rgbSize(frame.rgb.size.width, frame.rgb.size.height);
         const Vector2i depthSize(frame.depth.size.width, frame.depth.size.height);
 
@@ -117,6 +118,9 @@ namespace edgevision::builder {
         );
         m_denseMapper =
             std::make_unique<ITMLib::ITMDenseMapper<ITMVoxel, ITMVoxelIndex>>(&m_settings);
+        if (shouldResetScene) {
+            m_denseMapper->ResetScene(&scene);
+        }
         m_imuCalibrator = std::make_unique<ITMLib::ITMIMUCalibrator_iPad>();
         m_tracker.reset(
             ITMLib::ITMTrackerFactory::Instance().Make(
