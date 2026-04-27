@@ -20,6 +20,7 @@ else()
 endif()
 
 # Include cmake for deps to be pulled in
+include(extern/googletest.cmake)
 include(extern/k4a.cmake)
 include(extern/json.cmake)
 include(extern/torch.cmake)

@@ -108,7 +108,34 @@ namespace edgevision::config {
                     return result;
                 }
 
-                result.config.streaming.port = port;
+                result.config.streaming.tcp.port = port;
+                ++i;
+                continue;
+            }
+
+            if (arg == "--enable-tcp-streaming") {
+                result.config.streaming.tcp.enabled = true;
+                continue;
+            }
+
+            if (arg == "--disable-webrtc") {
+                result.config.streaming.webrtc.enabled = false;
+                continue;
+            }
+
+            if (arg == "--webrtc-port") {
+                if (i + 1 >= argc) {
+                    result.error = "Missing value for --webrtc-port";
+                    return result;
+                }
+
+                int port = 0;
+                if (!parsePort(argv[i + 1], port)) {
+                    result.error = "Invalid WebRTC port: " + std::string(argv[i + 1]);
+                    return result;
+                }
+
+                result.config.streaming.webrtc.signallingPort = static_cast<std::uint16_t>(port);
                 ++i;
                 continue;
             }
