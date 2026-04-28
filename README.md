@@ -292,6 +292,15 @@ sudo sync
 echo 3 | sudo tee /proc/sys/vm/drop_caches
 ```
 
+May also need to set Jetson to mac performance and crank the GPU
+```bash
+sudo nvpmodel -q
+sudo nvpmodel -m 0      # 25W , 15W 0
+# Overclocks Tegra
+sudo jetson_clocks
+sudo jetson_clocks --show
+```
+
 ---
 ### Direct Viewer ↔ Jetson Ethernet
 
