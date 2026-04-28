@@ -31,17 +31,4 @@ namespace edgevision::streaming::webrtc::utils {
         }
     }
 
-    std::optional<edgevision::model::viewer::ViewerPose> makeUpdatedViewerPose(
-        const std::optional<edgevision::model::viewer::ViewerPose>& currentPose,
-        const PoseUpdate& poseUpdate
-    ) {
-        if (!currentPose.has_value() || currentPose->pose.matrix == poseUpdate.matrix) {
-            return std::nullopt;
-        }
-
-        auto nextPose = *currentPose;
-        nextPose.pose.matrix = poseUpdate.matrix;
-        return nextPose;
-    }
-
 } // namespace edgevision::streaming::webrtc::utils

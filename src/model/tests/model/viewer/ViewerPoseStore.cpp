@@ -70,6 +70,38 @@ namespace {
         return viewerPose;
     }
 
+    edgevision::model::scene::Pose4f makeTranslationPose(float x, float y = 0.0f, float z = 0.0f) {
+        edgevision::model::scene::Pose4f pose{};
+        pose.matrix = {
+            1.0f,
+            0.0f,
+            0.0f,
+            0.0f,
+            0.0f,
+            1.0f,
+            0.0f,
+            0.0f,
+            0.0f,
+            0.0f,
+            1.0f,
+            0.0f,
+            x,
+            y,
+            z,
+            1.0f,
+        };
+        return pose;
+    }
+
+    ViewerPose makeViewerPoseWithPose(
+        const edgevision::model::scene::Pose4f& pose,
+        ViewerPoseGeneration generation = 0
+    ) {
+        ViewerPose viewerPose = makeViewerPose(generation);
+        viewerPose.pose = pose;
+        return viewerPose;
+    }
+
     void testLatestTracksMostRecentPose() {
         ViewerPoseStore store{};
 
@@ -134,12 +166,118 @@ namespace {
             !waitedPose.has_value(), "waitForNewer should time out when no newer pose is published"
         );
     }
+
+    void testResetRelativeBaselineRequiresCurrentPose() {
+        ViewerPoseStore store{};
+
+        expectTrue(
+            !store.resetRelativeBaseline(),
+            "resetRelativeBaseline should fail when no pose has been stored"
+        );
+        expectTrue(
+            !store.applyRelativePose(makeTranslationPose(0.2f)).has_value(),
+            "applyRelativePose should no-op when no baseline exists"
+        );
+    }
+
+    void testApplyRelativePosePublishesPoseAgainstBaseline() {
+        ViewerPoseStore store{};
+        const ViewerPose seededPose =
+            store.update(makeViewerPoseWithPose(makeTranslationPose(0.25f)));
+        expectTrue(
+            store.resetRelativeBaseline(),
+            "resetRelativeBaseline should capture the current stored pose"
+        );
+
+        const std::optional<ViewerPose> updatedPose =
+            store.applyRelativePose(makeTranslationPose(0.5f));
+
+        expectTrue(updatedPose.has_value(), "applyRelativePose should publish a composed pose");
+        expectEq(
+            updatedPose->pose.matrix[12],
+            0.75f,
+            "relative translation should compose against the captured baseline"
+        );
+        expectEq(
+            updatedPose->intrinsics.fx,
+            seededPose.intrinsics.fx,
+            "relative updates should preserve seeded intrinsics"
+        );
+        expectEq(
+            updatedPose->imageSize,
+            seededPose.imageSize,
+            "relative updates should preserve seeded image size"
+        );
+        expectTrue(
+            updatedPose->generation > seededPose.generation,
+            "relative updates should publish a newer generation"
+        );
+    }
+
+    void testApplyRelativePoseUsesFixedBaseline() {
+        ViewerPoseStore store{};
+        store.update(makeViewerPoseWithPose(makeTranslationPose(0.25f)));
+        expectTrue(
+            store.resetRelativeBaseline(),
+            "resetRelativeBaseline should capture the current stored pose"
+        );
+
+        const std::optional<ViewerPose> firstUpdate =
+            store.applyRelativePose(makeTranslationPose(0.5f));
+        const std::optional<ViewerPose> secondUpdate =
+            store.applyRelativePose(makeTranslationPose(0.5f));
+
+        expectTrue(firstUpdate.has_value(), "first relative pose should publish an update");
+        expectTrue(
+            !secondUpdate.has_value(),
+            "identical relative pose should not accumulate against the latest pose"
+        );
+
+        const std::optional<ViewerPose> latestPose = store.latest();
+        expectTrue(latestPose.has_value(), "latest should keep the previously published pose");
+        expectEq(
+            latestPose->pose.matrix[12],
+            0.75f,
+            "latest pose should remain composed against the captured baseline only once"
+        );
+    }
+
+    void testResetRelativeBaselineRebasesToCurrentPose() {
+        ViewerPoseStore store{};
+        store.update(makeViewerPoseWithPose(makeTranslationPose(0.25f)));
+        expectTrue(
+            store.resetRelativeBaseline(),
+            "resetRelativeBaseline should capture the seeded pose"
+        );
+        expectTrue(
+            store.applyRelativePose(makeTranslationPose(0.5f)).has_value(),
+            "first relative pose should publish an update"
+        );
+
+        expectTrue(
+            store.resetRelativeBaseline(),
+            "resetRelativeBaseline should capture the current pose when called again"
+        );
+        const std::optional<ViewerPose> rebasedUpdate =
+            store.applyRelativePose(makeTranslationPose(0.5f));
+
+        expectTrue(rebasedUpdate.has_value(), "rebased relative pose should publish an update");
+        expectEq(
+            rebasedUpdate->pose.matrix[12],
+            1.25f,
+            "rebased relative pose should compose against the latest captured baseline"
+        );
+    }
 } // namespace
 
 int main() {
     testLatestTracksMostRecentPose();
     testWaitForNewerReturnsAfterUpdate();
     testWaitForNewerTimesOutWhenNoUpdateArrives();
+    testResetRelativeBaselineRequiresCurrentPose();
+    testApplyRelativePosePublishesPoseAgainstBaseline();
+    testApplyRelativePoseUsesFixedBaseline();
+    testResetRelativeBaselineRebasesToCurrentPose();
 
     if (gFailures != 0) {
         std::cerr << "Tests failed: " << gFailures << '\n';

@@ -253,6 +253,12 @@ glxinfo | grep "OpenGL renderer"
 
 You should see the NVIDIA / Tegra renderer — not `llvmpipe`.
 
+
+Shell now makes this available by default
+```bash
+$ spinup_openGL.sh
+```
+
 ---
 
 ### Runtime Debugging And Performance
@@ -285,6 +291,47 @@ Cache may saturate memory on jetson:
 sudo sync
 echo 3 | sudo tee /proc/sys/vm/drop_caches
 ```
+
+---
+### Direct Viewer ↔ Jetson Ethernet
+
+Set static IPs on the direct Ethernet link:
+
+```text
+Viewer host: 192.168.50.1/24
+Jetson:      192.168.50.2/24
+```
+
+Viewer Ethernet adapter should be manual/static:
+
+```text
+IP:      192.168.50.1
+Subnet:  255.255.255.0
+Gateway: blank
+DNS:     blank
+```
+
+Jetson setup:
+
+```bash
+sudo nmcli con add type ethernet ifname enP8p1s0 con-name viewer-direct \
+  ipv4.method manual ipv4.addresses 192.168.50.2/24 ipv6.method ignore
+sudo nmcli con up viewer-direct
+```
+
+Quick tests:
+
+```bash
+# TCP: Jetson -> Viewer
+# Viewer: nc -lv 5001
+echo "hello" | nc 192.168.50.1 5001
+
+# UDP/WebRTC-style: Jetson -> Viewer
+# Viewer: nc -ul 5002
+echo "udp" | nc -u -w1 192.168.50.1 5002
+```
+
+WebRTC signalling should use `192.168.50.x`; STUN/TURN usually not needed on this link.
 
 ---
 

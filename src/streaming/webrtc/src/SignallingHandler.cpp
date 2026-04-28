@@ -14,10 +14,7 @@ namespace edgevision::streaming::webrtc {
             : m_host(std::move(host)),
               m_port(port),
               m_callbacks(std::move(cb)) {
-            m_server.clear_access_channels(websocketpp::log::alevel::all);
-            m_server.set_error_channels(websocketpp::log::elevel::warn |
-                                        websocketpp::log::elevel::rerror |
-                                        websocketpp::log::elevel::fatal);
+            configureLogging();
             m_server.init_asio();
             m_server.set_reuse_addr(true);
             m_server.set_open_handler(
@@ -35,13 +32,17 @@ namespace edgevision::streaming::webrtc {
             if (m_running.exchange(true)) {
                 return;
             }
+            m_stopping.store(false);
+            configureLogging();
             m_thread = std::thread([this] {
                 try {
                     m_server.listen(m_host, std::to_string(m_port));
                     m_server.start_accept();
                     m_server.run();
                 } catch (const std::exception& e) {
-                    std::cerr << "signalling server died: " << e.what() << std::endl;
+                    if (!m_stopping.load()) {
+                        std::cerr << "signalling server died: " << e.what() << std::endl;
+                    }
                 }
             });
         }
@@ -50,6 +51,8 @@ namespace edgevision::streaming::webrtc {
             if (!m_running.exchange(false)) {
                 return;
             }
+            m_stopping.store(true);
+            suppressLoggingForShutdown();
             try {
                 m_server.stop_listening();
             } catch (...) {
@@ -61,16 +64,25 @@ namespace edgevision::streaming::webrtc {
                 }
             } catch (...) {
             }
-            try {
-                m_server.stop();
-            } catch (...) {
-            }
             if (m_thread.joinable()) {
                 m_thread.join();
             }
         }
 
       private:
+        void configureLogging() {
+            m_server.clear_access_channels(websocketpp::log::alevel::all);
+            m_server.set_error_channels(
+                websocketpp::log::elevel::warn | websocketpp::log::elevel::rerror
+                | websocketpp::log::elevel::fatal
+            );
+        }
+
+        void suppressLoggingForShutdown() {
+            m_server.clear_access_channels(websocketpp::log::alevel::all);
+            m_server.clear_error_channels(websocketpp::log::elevel::all);
+        }
+
         void onOpen(WsHandle hdl) {
             {
                 std::lock_guard<std::mutex> g(m_clientMu);
@@ -118,7 +130,9 @@ namespace edgevision::streaming::webrtc {
                 try {
                     m_server.send(hdl, s, websocketpp::frame::opcode::text);
                 } catch (const std::exception& e) {
-                    std::cerr << "signalling send error: " << e.what() << std::endl;
+                    if (!m_stopping.load()) {
+                        std::cerr << "signalling send error: " << e.what() << std::endl;
+                    }
                 }
             };
             if (type == "offer" && m_callbacks.onOffer) {
@@ -136,6 +150,7 @@ namespace edgevision::streaming::webrtc {
         WsServer m_server;
         std::thread m_thread;
         std::atomic<bool> m_running{false};
+        std::atomic<bool> m_stopping{false};
         std::mutex m_clientMu;
         WsHandle m_client;
     };

@@ -5,9 +5,9 @@
 namespace {
     using edgevision::capture::makeK4aDeviceConfig;
     using edgevision::config::CaptureCameraConfig;
-    using edgevision::config::CaptureColorResolution;
     using edgevision::config::CaptureDepthMode;
     using edgevision::config::CaptureFrameRate;
+    using edgevision::config::ImageSize;
 
     int gFailures = 0;
 
@@ -41,34 +41,41 @@ namespace {
 #define EXPECT_EQ(lhs, rhs) expectEq((lhs), (rhs), #lhs, #rhs, __FILE__, __LINE__)
 
     void testDefaultConfigMapsToK4aDefaults() {
-        const k4a_device_configuration_t config = makeK4aDeviceConfig(CaptureCameraConfig{});
+        const auto config = makeK4aDeviceConfig(CaptureCameraConfig{}, ImageSize{1280, 720});
+        EXPECT_TRUE(config.has_value());
 
-        EXPECT_EQ(config.color_format, K4A_IMAGE_FORMAT_COLOR_BGRA32);
-        EXPECT_EQ(config.color_resolution, K4A_COLOR_RESOLUTION_720P);
-        EXPECT_EQ(config.depth_mode, K4A_DEPTH_MODE_NFOV_UNBINNED);
-        EXPECT_EQ(config.camera_fps, K4A_FRAMES_PER_SECOND_30);
-        EXPECT_TRUE(config.synchronized_images_only);
+        EXPECT_EQ(config->color_format, K4A_IMAGE_FORMAT_COLOR_BGRA32);
+        EXPECT_EQ(config->color_resolution, K4A_COLOR_RESOLUTION_720P);
+        EXPECT_EQ(config->depth_mode, K4A_DEPTH_MODE_NFOV_UNBINNED);
+        EXPECT_EQ(config->camera_fps, K4A_FRAMES_PER_SECOND_30);
+        EXPECT_TRUE(config->synchronized_images_only);
     }
 
     void testOverridesMapToK4aValues() {
         CaptureCameraConfig cameraConfig{};
-        cameraConfig.colorResolution = CaptureColorResolution::P1080;
         cameraConfig.depthMode = CaptureDepthMode::Wfov2x2Binned;
         cameraConfig.frameRate = CaptureFrameRate::Fps15;
         cameraConfig.synchronizedImagesOnly = false;
 
-        const k4a_device_configuration_t config = makeK4aDeviceConfig(cameraConfig);
+        const auto config = makeK4aDeviceConfig(cameraConfig, ImageSize{1920, 1080});
+        EXPECT_TRUE(config.has_value());
 
-        EXPECT_EQ(config.color_resolution, K4A_COLOR_RESOLUTION_1080P);
-        EXPECT_EQ(config.depth_mode, K4A_DEPTH_MODE_WFOV_2X2BINNED);
-        EXPECT_EQ(config.camera_fps, K4A_FRAMES_PER_SECOND_15);
-        EXPECT_EQ(config.synchronized_images_only, false);
+        EXPECT_EQ(config->color_resolution, K4A_COLOR_RESOLUTION_1080P);
+        EXPECT_EQ(config->depth_mode, K4A_DEPTH_MODE_WFOV_2X2BINNED);
+        EXPECT_EQ(config->camera_fps, K4A_FRAMES_PER_SECOND_15);
+        EXPECT_EQ(config->synchronized_images_only, false);
+    }
+
+    void testUnsupportedImageSizeIsRejected() {
+        const auto config = makeK4aDeviceConfig(CaptureCameraConfig{}, ImageSize{800, 600});
+        EXPECT_TRUE(!config.has_value());
     }
 } // namespace
 
 int main() {
     testDefaultConfigMapsToK4aDefaults();
     testOverridesMapToK4aValues();
+    testUnsupportedImageSizeIsRejected();
 
     if (gFailures != 0) {
         std::fprintf(stderr, "Tests failed: %d\n", gFailures);
