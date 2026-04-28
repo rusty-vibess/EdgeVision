@@ -23,7 +23,8 @@ Public transport control for remote viewer output lives in this directory.
 
 - `WebRtcServer` does not read `FrameStore`, `SharedScene`, or renderer callbacks directly.
 - `WebRtcServer` does not compose poses or reconstruct `ViewerPose` values directly.
-- transport sizing, bitrate, and signalling settings come from `config::WebRtcStreamingConfig`
+- transport bitrate and signalling settings come from `config::WebRtcStreamingConfig`
+- transport image size comes from the shared app image-size config
 - TCP streaming remains a separate transport option in `streaming/`
 
 ## TL;DR

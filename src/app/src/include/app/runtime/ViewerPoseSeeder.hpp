@@ -3,6 +3,7 @@
 #include <chrono>
 #include <optional>
 
+#include "config/types/image.hpp"
 #include "model/viewer/types/pose.hpp"
 
 namespace edgevision::model::frame {
@@ -24,7 +25,8 @@ namespace edgevision::app::runtime {
         ViewerPoseSeeder(
             const model::frame::FrameStore& frameStore,
             const model::scene::SceneVersionStore& sceneVersionStore,
-            model::viewer::ViewerPoseStore& viewerPoseStore
+            model::viewer::ViewerPoseStore& viewerPoseStore,
+            edgevision::config::ImageSize imageSize
         );
 
         [[nodiscard]] bool seedOnce(std::chrono::milliseconds timeout);
@@ -35,6 +37,7 @@ namespace edgevision::app::runtime {
         const model::frame::FrameStore& m_frameStore;
         const model::scene::SceneVersionStore& m_sceneVersionStore;
         model::viewer::ViewerPoseStore& m_viewerPoseStore;
+        edgevision::config::ImageSize m_imageSize{};
     };
 
 } // namespace edgevision::app::runtime

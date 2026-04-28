@@ -1,17 +1,18 @@
 #include <gtest/gtest.h>
 
+#include "config/types/image.hpp"
 #include "streaming/webrtc/PipelineBuilder.hpp"
 
+using edgevision::config::ImageSize;
 using edgevision::config::WebRtcStreamingConfig;
 using edgevision::streaming::webrtc::pipelineString;
 
 TEST(PipelineBuilder, ContainsViewerOutputBranchAndWebrtcbin) {
     WebRtcStreamingConfig cfg;
-    cfg.width = 854;
-    cfg.height = 480;
+    const ImageSize imageSize{854, 480};
     cfg.fps = 30;
     cfg.bitrateBps = 1500000;
-    const auto s = pipelineString(cfg);
+    const auto s = pipelineString(cfg, imageSize);
     EXPECT_NE(s.find("appsrc name=src_video"), std::string::npos);
     EXPECT_NE(s.find("webrtcbin name=sendrecv"), std::string::npos);
     EXPECT_NE(s.find("format=RGB"), std::string::npos);
@@ -23,7 +24,7 @@ TEST(PipelineBuilder, ContainsViewerOutputBranchAndWebrtcbin) {
 
 TEST(PipelineBuilder, OmitsLegacyBranchNames) {
     WebRtcStreamingConfig cfg;
-    const auto s = pipelineString(cfg);
+    const auto s = pipelineString(cfg, ImageSize{1280, 720});
     EXPECT_EQ(s.find("appsrc name=src_rgb"), std::string::npos);
     EXPECT_EQ(s.find("appsrc name=src_tsdf"), std::string::npos);
 }
@@ -31,7 +32,7 @@ TEST(PipelineBuilder, OmitsLegacyBranchNames) {
 TEST(PipelineBuilder, FrameRateAndIdrInterval) {
     WebRtcStreamingConfig cfg;
     cfg.fps = 30;
-    const auto s = pipelineString(cfg);
+    const auto s = pipelineString(cfg, ImageSize{1280, 720});
     EXPECT_NE(s.find("framerate=30/1"), std::string::npos);
     EXPECT_NE(s.find("key-int-max=30"), std::string::npos);
 }
