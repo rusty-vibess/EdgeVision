@@ -14,11 +14,13 @@ namespace edgevision::app::runtime {
     ViewerPoseSeeder::ViewerPoseSeeder(
         const edgevision::model::frame::FrameStore& frameStore,
         const edgevision::model::scene::SceneVersionStore& sceneVersionStore,
-        edgevision::model::viewer::ViewerPoseStore& viewerPoseStore
+        edgevision::model::viewer::ViewerPoseStore& viewerPoseStore,
+        edgevision::config::ImageSize imageSize
     )
         : m_frameStore(frameStore),
           m_sceneVersionStore(sceneVersionStore),
-          m_viewerPoseStore(viewerPoseStore) {}
+          m_viewerPoseStore(viewerPoseStore),
+          m_imageSize(imageSize) {}
 
     bool ViewerPoseSeeder::seedOnce(std::chrono::milliseconds timeout) {
         if (m_viewerPoseStore.latest().has_value()) {
@@ -57,7 +59,8 @@ namespace edgevision::app::runtime {
         edgevision::model::viewer::ViewerPose viewerPose{};
         viewerPose.pose = sceneVersion->cameraToWorld;
         viewerPose.intrinsics = frame->intrinsics;
-        viewerPose.imageSize = frame->rgb.size;
+        viewerPose.imageSize =
+            edgevision::model::frame::ImageSize{m_imageSize.width, m_imageSize.height};
         return viewerPose;
     }
 

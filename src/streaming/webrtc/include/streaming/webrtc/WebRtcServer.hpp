@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <memory>
 
+#include "config/types/image.hpp"
 #include "config/types/streaming.hpp"
 
 namespace edgevision::model::viewer {
@@ -19,6 +20,7 @@ namespace edgevision::streaming::webrtc {
       public:
         WebRtcServer(
             edgevision::config::WebRtcStreamingConfig config,
+            edgevision::config::ImageSize imageSize,
             edgevision::model::viewer::ViewerPoseStore& viewerPoseStore,
             edgevision::model::viewer::RenderOutputStore& renderOutputStore
         );
@@ -37,6 +39,7 @@ namespace edgevision::streaming::webrtc {
     /// Convenience entry point for main.cpp.
     [[nodiscard]] std::unique_ptr<WebRtcServer> startWebRtcServer(
         edgevision::config::WebRtcStreamingConfig config,
+        edgevision::config::ImageSize imageSize,
         edgevision::model::viewer::ViewerPoseStore& viewerPoseStore,
         edgevision::model::viewer::RenderOutputStore& renderOutputStore
     );

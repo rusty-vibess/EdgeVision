@@ -74,10 +74,12 @@ namespace edgevision::streaming::webrtc {
     struct WebRtcServer::Impl {
         Impl(
             edgevision::config::WebRtcStreamingConfig config,
+            edgevision::config::ImageSize imageSize,
             edgevision::model::viewer::ViewerPoseStore& viewerPoseStore,
             edgevision::model::viewer::RenderOutputStore& renderOutputStore
         )
             : m_config(std::move(config)),
+              m_imageSize(imageSize),
               m_viewerPoseStore(viewerPoseStore),
               m_renderOutputStore(renderOutputStore) {}
 
@@ -98,7 +100,9 @@ namespace edgevision::streaming::webrtc {
                 onOffer(sdp, std::move(reply));
             };
             callbacks.onIce = [this](const json& candidate) { onIceFromClient(candidate); };
-            callbacks.onClientConnected = [] {};
+            callbacks.onClientConnected = [this] {
+                static_cast<void>(m_viewerPoseStore.resetRelativeBaseline());
+            };
             callbacks.onClientDisconnected = [this] { onClientDisconnected(); };
 
             m_signalling = std::make_unique<SignallingHandler>(
@@ -129,7 +133,7 @@ namespace edgevision::streaming::webrtc {
       private:
         void onOffer(const std::string& sdp, SendFunc reply) {
             tearDownPipeline();
-            m_handles = buildPipeline(m_config);
+            m_handles = buildPipeline(m_config, m_imageSize);
             if (m_handles.pipeline == nullptr) {
                 std::cerr << "buildPipeline failed\n";
                 return;
@@ -276,11 +280,9 @@ namespace edgevision::streaming::webrtc {
         }
 
         void applyPoseUpdate(const PoseUpdate& pose) {
-            if (const auto nextPose =
-                    utils::makeUpdatedViewerPose(m_viewerPoseStore.latest(), pose);
-                nextPose.has_value()) {
-                static_cast<void>(m_viewerPoseStore.update(*nextPose));
-            }
+            edgevision::model::scene::Pose4f relativePose{};
+            relativePose.matrix = pose.matrix;
+            static_cast<void>(m_viewerPoseStore.applyRelativePose(relativePose));
         }
 
         void sendControlText(const std::string& text) {
@@ -344,12 +346,12 @@ namespace edgevision::streaming::webrtc {
             const edgevision::model::viewer::RenderOutput& output,
             std::vector<std::uint8_t>& rgb
         ) {
-            if (output.imageSize.width != static_cast<int>(m_config.width)
-                || output.imageSize.height != static_cast<int>(m_config.height)) {
+            if (output.imageSize.width != m_imageSize.width
+                || output.imageSize.height != m_imageSize.height) {
                 if (!m_warnedFrameShapeMismatch) {
-                    std::cerr << "WebRTC output size mismatch: expected " << m_config.width << 'x'
-                              << m_config.height << " but received " << output.imageSize.width
-                              << 'x' << output.imageSize.height << '\n';
+                    std::cerr << "WebRTC output size mismatch: expected " << m_imageSize.width
+                              << 'x' << m_imageSize.height << " but received "
+                              << output.imageSize.width << 'x' << output.imageSize.height << '\n';
                     m_warnedFrameShapeMismatch = true;
                 }
                 return;
@@ -382,6 +384,7 @@ namespace edgevision::streaming::webrtc {
         }
 
         edgevision::config::WebRtcStreamingConfig m_config;
+        edgevision::config::ImageSize m_imageSize{};
         edgevision::model::viewer::ViewerPoseStore& m_viewerPoseStore;
         edgevision::model::viewer::RenderOutputStore& m_renderOutputStore;
         std::unique_ptr<SignallingHandler> m_signalling;
@@ -396,10 +399,18 @@ namespace edgevision::streaming::webrtc {
 
     WebRtcServer::WebRtcServer(
         edgevision::config::WebRtcStreamingConfig config,
+        edgevision::config::ImageSize imageSize,
         edgevision::model::viewer::ViewerPoseStore& viewerPoseStore,
         edgevision::model::viewer::RenderOutputStore& renderOutputStore
     )
-        : m_impl(std::make_unique<Impl>(std::move(config), viewerPoseStore, renderOutputStore)) {}
+        : m_impl(
+              std::make_unique<Impl>(
+                  std::move(config),
+                  imageSize,
+                  viewerPoseStore,
+                  renderOutputStore
+              )
+          ) {}
 
     WebRtcServer::~WebRtcServer() = default;
 
@@ -413,11 +424,13 @@ namespace edgevision::streaming::webrtc {
 
     std::unique_ptr<WebRtcServer> startWebRtcServer(
         edgevision::config::WebRtcStreamingConfig config,
+        edgevision::config::ImageSize imageSize,
         edgevision::model::viewer::ViewerPoseStore& viewerPoseStore,
         edgevision::model::viewer::RenderOutputStore& renderOutputStore
     ) {
-        auto server =
-            std::make_unique<WebRtcServer>(std::move(config), viewerPoseStore, renderOutputStore);
+        auto server = std::make_unique<WebRtcServer>(
+            std::move(config), imageSize, viewerPoseStore, renderOutputStore
+        );
         server->start();
         return server;
     }

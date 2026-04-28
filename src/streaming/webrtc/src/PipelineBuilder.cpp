@@ -8,15 +8,18 @@ namespace edgevision::streaming::webrtc {
 
     namespace {
 
-        std::string makeVideoBranchString(const edgevision::config::WebRtcStreamingConfig& cfg) {
+        std::string makeVideoBranchString(
+            const edgevision::config::WebRtcStreamingConfig& cfg,
+            const edgevision::config::ImageSize& imageSize
+        ) {
             // Software x264 encode: Orin Nano has no NVENC. Pin to cores 4-5
             // (WebRtcStreamingConfig.pumpCoreMask) and keep `threads=2` to fit
             // the budget. x264enc bitrate is in kbps, not bps.
             const std::uint32_t kbps = cfg.bitrateBps / 1000u;
             std::ostringstream oss;
             oss << "appsrc name=src_video is-live=true do-timestamp=true format=time"
-                << " caps=\"video/x-raw,format=RGB,width=" << cfg.width << ",height=" << cfg.height
-                << ",framerate=" << cfg.fps << "/1\""
+                << " caps=\"video/x-raw,format=RGB,width=" << imageSize.width
+                << ",height=" << imageSize.height << ",framerate=" << cfg.fps << "/1\""
                 << " ! queue max-size-buffers=2 leaky=downstream"
                 << " ! videoconvert ! video/x-raw,format=I420"
                 << " ! x264enc tune=zerolatency speed-preset=ultrafast"
@@ -31,17 +34,23 @@ namespace edgevision::streaming::webrtc {
 
     } // namespace
 
-    std::string pipelineString(const edgevision::config::WebRtcStreamingConfig& cfg) {
+    std::string pipelineString(
+        const edgevision::config::WebRtcStreamingConfig& cfg,
+        const edgevision::config::ImageSize& imageSize
+    ) {
         std::ostringstream oss;
-        oss << makeVideoBranchString(cfg)
+        oss << makeVideoBranchString(cfg, imageSize)
             << " webrtcbin name=sendrecv stun-server=" << cfg.stunServer
             << " bundle-policy=max-bundle";
         return oss.str();
     }
 
-    PipelineHandles buildPipeline(const edgevision::config::WebRtcStreamingConfig& cfg) {
+    PipelineHandles buildPipeline(
+        const edgevision::config::WebRtcStreamingConfig& cfg,
+        const edgevision::config::ImageSize& imageSize
+    ) {
         PipelineHandles h{};
-        const auto desc = pipelineString(cfg);
+        const auto desc = pipelineString(cfg, imageSize);
 
         GError* err = nullptr;
         h.pipeline = gst_parse_launch(desc.c_str(), &err);

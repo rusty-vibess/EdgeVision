@@ -51,6 +51,8 @@ namespace {
         EXPECT_EQ(result.config.streaming.tcp.port, 6688);
         EXPECT_TRUE(result.config.streaming.webrtc.enabled);
         EXPECT_EQ(result.config.streaming.webrtc.signallingPort, std::uint16_t{6689});
+        EXPECT_EQ(result.config.imageSize.width, 1280);
+        EXPECT_EQ(result.config.imageSize.height, 720);
         EXPECT_EQ(result.config.scene.readPolicy, SceneReadPolicy::Greedy);
         EXPECT_TRUE(result.config.capture.enabled);
         EXPECT_EQ(result.config.builder.readyFrameTimeoutMs, 50);
@@ -173,6 +175,7 @@ namespace {
         defaults.streaming.tcp.port = 9000;
         defaults.streaming.webrtc.enabled = false;
         defaults.streaming.webrtc.signallingPort = 7777;
+        defaults.imageSize = edgevision::config::ImageSize{2048, 1536};
         defaults.capture.enabled = false;
         defaults.scene.readPolicy = SceneReadPolicy::Balanced;
         defaults.capture.runtime.captureTimeoutMs = 25;
@@ -194,6 +197,7 @@ namespace {
         EXPECT_EQ(result.config.streaming.tcp.port, 9000);
         EXPECT_FALSE(result.config.streaming.webrtc.enabled);
         EXPECT_EQ(result.config.streaming.webrtc.signallingPort, std::uint16_t{7777});
+        EXPECT_EQ(result.config.imageSize, defaults.imageSize);
         EXPECT_EQ(result.config.scene.readPolicy, SceneReadPolicy::Balanced);
         EXPECT_FALSE(result.config.capture.enabled);
         EXPECT_EQ(result.config.capture.runtime.captureTimeoutMs, 25);

@@ -8,6 +8,8 @@ Public viewer model state lives in this directory.
 
 - `ViewerPoseStore`
   - `update(ViewerPose)`
+  - `resetRelativeBaseline()`
+  - `applyRelativePose(Pose4f)`
   - `latest()`
   - `waitForNewer(ViewerPoseGeneration, timeout)`
 - `RenderOutputStore`
@@ -26,6 +28,7 @@ Public viewer model state lives in this directory.
 
 - producers publish view requests via `ViewerPoseStore`
 - `ViewerPoseStore` preserves the latest pose snapshot
+- relative pose consumers can capture a baseline and publish composed absolute poses
 - generations advance monotonically so background consumers can wait for newer poses
 - viewer code publishes rendered RGB frames via `RenderOutputStore`
 - `RenderOutputStore` retains the latest output plus a bounded recent history
@@ -35,6 +38,7 @@ Public viewer model state lives in this directory.
 - `ViewerPose` stores camera pose, intrinsics, requested image size, and update generation.
 - `RenderOutput` stores contiguous RGB bytes plus the pose generation and scene version used.
 - stores own synchronization; value types remain plain transport objects
+- relative baseline semantics live in `ViewerPoseStore`, not transport code
 
 ## TL;DR
 
