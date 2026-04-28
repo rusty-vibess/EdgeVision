@@ -24,7 +24,7 @@ Ensure to utilise `clang-format`, it should be available to you to call on files
 
 * Repo structure conventions should be followed consistently:
   * Module-owned public concrete headers belong under `include/<module>`.
-  * These headers should be imported via the module path, for example `#include "reconstruction/ReconstructionPipeline.hpp"`.
+  * These headers should be imported via the module path, for example `#include "viewer/SceneViewerRunner.hpp"`.
   * Domain public APIs belong under `include/<module>/<domain>` and domain public types under `include/<module>/<domain>/types`.
   * Module-owned public interfaces may live under `include/<module>/interfaces` when they should be imported via the module path.
   * Private implementation headers belong under `src/<module>/src/<domain>/include`.
