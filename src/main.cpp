@@ -79,7 +79,7 @@ int main(int argc, char* argv[]) {
         viewerPoseStore, sharedScene, renderOutputStore, appConfig.viewer
     );
     edgevision::app::runtime::ViewerPoseSeeder viewerPoseSeeder(
-        frameStore, sceneVersionStore, viewerPoseStore
+        frameStore, sceneVersionStore, viewerPoseStore, appConfig.imageSize
     );
     edgevision::app::runtime::ViewerDebugSession viewerDebugSession(
         renderOutputStore, appConfig.debug.viewerDump, [&]() {
@@ -128,10 +128,16 @@ int main(int argc, char* argv[]) {
     }
     std::cout << "K4A device opened" << std::endl;
 
-    const k4a_device_configuration_t k4aConfig =
-        edgevision::capture::makeK4aDeviceConfig(appConfig.capture.camera);
+    const std::optional<k4a_device_configuration_t> k4aConfig =
+        edgevision::capture::makeK4aDeviceConfig(appConfig.capture.camera, appConfig.imageSize);
+    if (!k4aConfig.has_value()) {
+        std::cerr << "Unsupported configured image size " << appConfig.imageSize.width << 'x'
+                  << appConfig.imageSize.height << " for K4A color capture" << std::endl;
+        cleanup();
+        return 1;
+    }
     std::cout << "Starting K4A cameras..." << std::endl;
-    if (!camera.start(k4aConfig)) {
+    if (!camera.start(*k4aConfig)) {
         std::cerr << "Failed to start K4A cameras" << std::endl;
         cleanup();
         return 1;
@@ -166,7 +172,7 @@ int main(int argc, char* argv[]) {
         std::cout << "Starting WebRTC streaming on " << appConfig.streaming.webrtc.signallingHost
                   << ':' << appConfig.streaming.webrtc.signallingPort << "..." << std::endl;
         webRtcServer = edgevision::streaming::webrtc::startWebRtcServer(
-            appConfig.streaming.webrtc, viewerPoseStore, renderOutputStore
+            appConfig.streaming.webrtc, appConfig.imageSize, viewerPoseStore, renderOutputStore
         );
         std::cout << "WebRTC streaming started" << std::endl;
     }

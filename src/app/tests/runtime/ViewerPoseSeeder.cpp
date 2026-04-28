@@ -123,7 +123,9 @@ namespace {
         FrameStore frameStore{};
         SceneVersionStore sceneVersionStore{};
         ViewerPoseStore viewerPoseStore{};
-        ViewerPoseSeeder seeder(frameStore, sceneVersionStore, viewerPoseStore);
+        ViewerPoseSeeder seeder(
+            frameStore, sceneVersionStore, viewerPoseStore, ImageSize{1280, 720}
+        );
 
         expectTrue(
             !seeder.seedOnce(std::chrono::milliseconds(5)),
@@ -150,7 +152,10 @@ namespace {
         sceneVersionStore.add(sceneVersion);
 
         ViewerPoseStore viewerPoseStore{};
-        ViewerPoseSeeder seeder(frameStore, sceneVersionStore, viewerPoseStore);
+        const ImageSize configuredImageSize{8, 6};
+        ViewerPoseSeeder seeder(
+            frameStore, sceneVersionStore, viewerPoseStore, configuredImageSize
+        );
 
         expectTrue(
             seeder.seedOnce(std::chrono::milliseconds(10)),
@@ -165,7 +170,11 @@ namespace {
         expectEq(
             latestPose->intrinsics.fx, frame.intrinsics.fx, "seed pose should copy intrinsics"
         );
-        expectEq(latestPose->imageSize, frame.rgb.size, "seed pose should copy rgb image size");
+        expectEq(
+            latestPose->imageSize,
+            configuredImageSize,
+            "seed pose should use the configured image size"
+        );
     }
 
     void testSeedOnceDoesNotOverwriteExistingViewerPose() {
@@ -189,7 +198,9 @@ namespace {
         existingPose.generation = 7;
         const ViewerPose storedPose = viewerPoseStore.update(existingPose);
 
-        ViewerPoseSeeder seeder(frameStore, sceneVersionStore, viewerPoseStore);
+        ViewerPoseSeeder seeder(
+            frameStore, sceneVersionStore, viewerPoseStore, ImageSize{1280, 720}
+        );
         expectTrue(
             seeder.seedOnce(std::chrono::milliseconds(10)),
             "seedOnce should succeed immediately when a viewer pose already exists"

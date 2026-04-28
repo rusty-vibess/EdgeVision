@@ -4,20 +4,13 @@
 #include <memory>
 #include <utility>
 
+#include "config/types/image.hpp"
+
 namespace edgevision::model::frame {
 
-    struct ImageSize {
-        int width = 0;
-        int height = 0;
-    };
-
-    [[nodiscard]] constexpr bool operator==(const ImageSize& lhs, const ImageSize& rhs) {
-        return lhs.width == rhs.width && lhs.height == rhs.height;
-    }
-
-    [[nodiscard]] constexpr bool operator!=(const ImageSize& lhs, const ImageSize& rhs) {
-        return !(lhs == rhs);
-    }
+    using ImageSize = edgevision::config::ImageSize;
+    using edgevision::config::operator!=;
+    using edgevision::config::operator==;
 
     struct FrameBuffer {
         const std::byte* data = nullptr;
