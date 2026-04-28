@@ -18,7 +18,6 @@ target_include_directories(streaming PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 target_link_libraries(streaming
-    PRIVATE "${TORCH_LIBRARIES}"
     PRIVATE nlohmann_json::nlohmann_json
     PRIVATE JPEG::JPEG
 )

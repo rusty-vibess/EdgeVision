@@ -77,15 +77,11 @@ target_include_directories(EdgeVision PRIVATE
 )
 # third_party deps install
 list(APPEND CMAKE_PREFIX_PATH "${SYSROOT_OVERLAY}/install")
-# Torch being lower in the superbuild caused strange issues hence find_package here
-find_package(Torch CONFIG REQUIRED)
-
 add_subdirectory(src/config)
 add_subdirectory(src/model)
 add_subdirectory(src/builder)
 add_subdirectory(src/viewer)
 add_subdirectory(src/capture)
-add_subdirectory(src/reconstruction)
 add_subdirectory(src/streaming)
 add_subdirectory(src/streaming/webrtc)
 
@@ -97,7 +93,6 @@ target_link_libraries(EdgeVision PRIVATE config)
 target_link_libraries(EdgeVision PRIVATE builder)
 target_link_libraries(EdgeVision PRIVATE capture)
 target_link_libraries(EdgeVision PRIVATE model)
-target_link_libraries(EdgeVision PRIVATE reconstruction)
 target_link_libraries(EdgeVision PRIVATE streaming)
 target_link_libraries(EdgeVision PRIVATE streaming_webrtc)
 target_link_libraries(EdgeVision PRIVATE viewer)
