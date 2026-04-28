@@ -12,7 +12,7 @@
 - Place it at the nearest public include boundary that owns the API being described.
 - For example:
   - `src/model/include/model/scene/README.md`
-  - `src/reconstruction/include/reconstruction/README.md`
+  - `src/viewer/include/viewer/README.md`
 - Use `README.md` for discoverability. Do not invent a more specific filename unless there are multiple docs in the same directory.
 
 ## What Belongs In A Local README
