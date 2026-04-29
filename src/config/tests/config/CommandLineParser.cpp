@@ -1,6 +1,7 @@
 #include "config/CommandLineParser.hpp"
 
 #include <cstdio>
+#include <string>
 
 namespace {
     using edgevision::config::AppConfig;
@@ -51,6 +52,7 @@ namespace {
         EXPECT_EQ(result.config.streaming.tcp.port, 6688);
         EXPECT_TRUE(result.config.streaming.webrtc.enabled);
         EXPECT_EQ(result.config.streaming.webrtc.signallingPort, std::uint16_t{6689});
+        EXPECT_TRUE(result.config.streaming.webrtc.stunServer.empty());
         EXPECT_EQ(result.config.imageSize.width, 1280);
         EXPECT_EQ(result.config.imageSize.height, 720);
         EXPECT_EQ(result.config.scene.readPolicy, SceneReadPolicy::Greedy);
@@ -119,6 +121,33 @@ namespace {
 
         EXPECT_TRUE(result.parsed());
         EXPECT_EQ(result.config.streaming.webrtc.signallingPort, std::uint16_t{6690});
+    }
+
+    void testWebRtcStunOverride() {
+        char executable[] = "EdgeVision";
+        char stunFlag[] = "--webrtc-stun";
+        char stunValue[] = "stun://example.invalid:19302";
+        char* argv[] = {executable, stunFlag, stunValue};
+
+        const auto result = parseCommandLine(3, argv);
+
+        EXPECT_TRUE(result.parsed());
+        EXPECT_EQ(result.config.streaming.webrtc.stunServer, std::string{stunValue});
+    }
+
+    void testWebRtcStunNoneClearsServer() {
+        char executable[] = "EdgeVision";
+        char stunFlag[] = "--webrtc-stun";
+        char stunValue[] = "none";
+        char* argv[] = {executable, stunFlag, stunValue};
+
+        AppConfig defaults{};
+        defaults.streaming.webrtc.stunServer = "stun://example.invalid:19302";
+
+        const auto result = parseCommandLine(3, argv, defaults);
+
+        EXPECT_TRUE(result.parsed());
+        EXPECT_TRUE(result.config.streaming.webrtc.stunServer.empty());
     }
 
     void testReadPolicyGreedyOverride() {
@@ -271,6 +300,16 @@ namespace {
         EXPECT_FALSE(result.parsed());
     }
 
+    void testMissingWebRtcStunValueFails() {
+        char executable[] = "EdgeVision";
+        char stunFlag[] = "--webrtc-stun";
+        char* argv[] = {executable, stunFlag};
+
+        const auto result = parseCommandLine(2, argv);
+
+        EXPECT_FALSE(result.parsed());
+    }
+
     void testMissingReadPolicyValueFails() {
         char executable[] = "EdgeVision";
         char readPolicyFlag[] = "--read-policy";
@@ -363,6 +402,8 @@ int main() {
     testEnableTcpStreamingFlag();
     testDisableWebRtcFlag();
     testWebRtcPortOverride();
+    testWebRtcStunOverride();
+    testWebRtcStunNoneClearsServer();
     testReadPolicyGreedyOverride();
     testReadPolicyBalancedOverride();
     testViewerPolicyEventOverride();
@@ -373,6 +414,7 @@ int main() {
     testExplicitDebugFramesBeatsEnableDebug();
     testInvalidPortFails();
     testInvalidWebRtcPortFails();
+    testMissingWebRtcStunValueFails();
     testMissingReadPolicyValueFails();
     testInvalidReadPolicyFails();
     testMissingViewerPolicyValueFails();
