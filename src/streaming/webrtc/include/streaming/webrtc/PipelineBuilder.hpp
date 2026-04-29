@@ -13,6 +13,7 @@ namespace edgevision::streaming::webrtc {
         GstElement* pipeline = nullptr;
         GstElement* webrtcbin = nullptr;
         GstElement* videoAppSrc = nullptr;
+        GstElement* videoPayloader = nullptr;
     };
 
     /// Constructs the gstreamer pipeline, returns owned handles. Caller

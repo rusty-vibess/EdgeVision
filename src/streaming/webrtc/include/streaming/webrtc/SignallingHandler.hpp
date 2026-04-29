@@ -4,10 +4,9 @@
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <nlohmann/json.hpp>
 #include <string>
 #include <thread>
-
-#include <nlohmann/json.hpp>
 
 namespace edgevision::streaming::webrtc {
 
@@ -16,20 +15,16 @@ namespace edgevision::streaming::webrtc {
     /// Callbacks invoked from the WS server thread. All implementations
     /// must be thread-safe.
     struct SignallingCallbacks {
-        std::function<void(const std::string& sdpOffer, SendFunc reply)> onOffer;
+        std::function<void(const std::string& sdpAnswer)> onAnswer;
         std::function<void(const nlohmann::json& candidate)> onIce;
-        std::function<void()> onClientConnected;
+        std::function<void(SendFunc reply)> onClientConnected;
         std::function<void()> onClientDisconnected;
     };
 
     /// Single-client WebSocket listener. Wraps websocketpp.
     class SignallingHandler {
       public:
-        SignallingHandler(
-            std::string host,
-            std::uint16_t port,
-            SignallingCallbacks callbacks
-        );
+        SignallingHandler(std::string host, std::uint16_t port, SignallingCallbacks callbacks);
 
         SignallingHandler(const SignallingHandler&) = delete;
         SignallingHandler& operator=(const SignallingHandler&) = delete;
@@ -38,6 +33,7 @@ namespace edgevision::streaming::webrtc {
 
         void start();
         void stop();
+        void closeActiveClient(const std::string& reason);
 
       private:
         struct Impl;
