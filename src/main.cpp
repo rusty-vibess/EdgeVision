@@ -34,6 +34,7 @@ namespace {
 
 /// Usage: ./EdgeVision [--port 6688] [--enable-tcp-streaming]
 ///                      [--webrtc-port 6689] [--disable-webrtc]
+///                      [--webrtc-stun url|none]
 ///                      [--disable-capture]
 ///                      [--read-policy greedy|balanced]
 ///                      [--viewer-policy event|hot-loop]
