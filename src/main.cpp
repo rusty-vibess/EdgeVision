@@ -1,7 +1,9 @@
 #include <algorithm>
 #include <chrono>
+#include <csignal>
 #include <iostream>
 #include <memory>
+#include <thread>
 
 #include "app/runtime/ViewerDebugSession.hpp"
 #include "app/runtime/ViewerPoseSeeder.hpp"
@@ -23,10 +25,16 @@ namespace {
 
     constexpr auto kViewerSeedTimeout = 30s;
     constexpr auto kViewerOutputTimeout = 30s;
+    volatile std::sig_atomic_t gShouldStop = 0;
+
+    void onTerminationSignal(int) {
+        gShouldStop = 1;
+    }
 } // namespace
 
 /// Usage: ./EdgeVision [--port 6688] [--enable-tcp-streaming]
 ///                      [--webrtc-port 6689] [--disable-webrtc]
+///                      [--webrtc-stun url|none]
 ///                      [--disable-capture]
 ///                      [--read-policy greedy|balanced]
 ///                      [--viewer-policy event|hot-loop]
@@ -41,9 +49,12 @@ int main(int argc, char* argv[]) {
 
     const edgevision::config::AppConfig appConfig = parseResult.config;
     if (!appConfig.capture.enabled) {
-        std::cerr << "Viewer smoke test requires capture to remain enabled" << std::endl;
+        std::cerr << "EdgeVision requires capture to remain enabled" << std::endl;
         return 1;
     }
+
+    std::signal(SIGINT, &onTerminationSignal);
+    std::signal(SIGTERM, &onTerminationSignal);
 
     // Import types
     edgevision::capture::CameraCapture camera{};
@@ -69,7 +80,7 @@ int main(int argc, char* argv[]) {
         viewerPoseStore, sharedScene, renderOutputStore, appConfig.viewer
     );
     edgevision::app::runtime::ViewerPoseSeeder viewerPoseSeeder(
-        frameStore, sceneVersionStore, viewerPoseStore
+        frameStore, sceneVersionStore, viewerPoseStore, appConfig.imageSize
     );
     edgevision::app::runtime::ViewerDebugSession viewerDebugSession(
         renderOutputStore, appConfig.debug.viewerDump, [&]() {
@@ -118,10 +129,16 @@ int main(int argc, char* argv[]) {
     }
     std::cout << "K4A device opened" << std::endl;
 
-    const k4a_device_configuration_t k4aConfig =
-        edgevision::capture::makeK4aDeviceConfig(appConfig.capture.camera);
+    const std::optional<k4a_device_configuration_t> k4aConfig =
+        edgevision::capture::makeK4aDeviceConfig(appConfig.capture.camera, appConfig.imageSize);
+    if (!k4aConfig.has_value()) {
+        std::cerr << "Unsupported configured image size " << appConfig.imageSize.width << 'x'
+                  << appConfig.imageSize.height << " for K4A color capture" << std::endl;
+        cleanup();
+        return 1;
+    }
     std::cout << "Starting K4A cameras..." << std::endl;
-    if (!camera.start(k4aConfig)) {
+    if (!camera.start(*k4aConfig)) {
         std::cerr << "Failed to start K4A cameras" << std::endl;
         cleanup();
         return 1;
@@ -156,7 +173,7 @@ int main(int argc, char* argv[]) {
         std::cout << "Starting WebRTC streaming on " << appConfig.streaming.webrtc.signallingHost
                   << ':' << appConfig.streaming.webrtc.signallingPort << "..." << std::endl;
         webRtcServer = edgevision::streaming::webrtc::startWebRtcServer(
-            appConfig.streaming.webrtc, viewerPoseStore, renderOutputStore
+            appConfig.streaming.webrtc, appConfig.imageSize, viewerPoseStore, renderOutputStore
         );
         std::cout << "WebRTC streaming started" << std::endl;
     }
@@ -184,21 +201,20 @@ int main(int argc, char* argv[]) {
         std::cout << "Waiting to dump " << appConfig.debug.viewerDump.maxFrames
                   << " viewer frame(s) to " << viewerDebugSession.outputDirectory()
                   << " with metrics in " << viewerDebugSession.logPath() << "..." << std::endl;
-    } else {
-        std::cout << "Waiting for first non-cached viewer render output..." << std::endl;
-    }
-    if (!viewerDebugSession.waitForCompletion(kViewerOutputTimeout)) {
-        std::cerr << "Timed out waiting for viewer render outputs" << std::endl;
-        cleanup();
-        return 1;
-    }
+        if (!viewerDebugSession.waitForCompletion(kViewerOutputTimeout)) {
+            std::cerr << "Timed out waiting for viewer render outputs" << std::endl;
+            cleanup();
+            return 1;
+        }
 
-    if (viewerDebugSession.dumpingEnabled()) {
         std::cout << "Dumped " << viewerDebugSession.dumpedOutputCount() << " viewer frame(s) to "
                   << viewerDebugSession.outputDirectory() << " and wrote metrics to "
                   << viewerDebugSession.logPath() << std::endl;
     } else {
-        std::cout << "Observed first non-cached viewer render output" << std::endl;
+        std::cout << "EdgeVision running. Press Ctrl+C to stop." << std::endl;
+        while (gShouldStop == 0) {
+            std::this_thread::sleep_for(100ms);
+        }
     }
 
     cleanup();

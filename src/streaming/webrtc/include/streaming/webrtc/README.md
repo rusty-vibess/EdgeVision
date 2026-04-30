@@ -13,16 +13,18 @@ Public transport control for remote viewer output lives in this directory.
 
 ## Flow
 
-- incoming client pose messages update the pose matrix only
-- the current `model::viewer::ViewerPose` carries any existing non-pose fields
-- updated poses are written through `model::viewer::ViewerPoseStore`
+- incoming client pose messages carry a pose matrix only
+- WebRTC resets the relative-pose baseline when a client connects
+- relative pose application is handled by `model::viewer::ViewerPoseStore`
 - rendered frames are read from `model::viewer::RenderOutputStore`
 - WebRTC transports the latest rendered RGB frame as H.264 over `webrtcbin`
 
 ## Other Notes
 
 - `WebRtcServer` does not read `FrameStore`, `SharedScene`, or renderer callbacks directly.
-- transport sizing, bitrate, and signalling settings come from `config::WebRtcStreamingConfig`
+- `WebRtcServer` does not compose poses or reconstruct `ViewerPose` values directly.
+- transport bitrate and signalling settings come from `config::WebRtcStreamingConfig`
+- transport image size comes from the shared app image-size config
 - TCP streaming remains a separate transport option in `streaming/`
 
 ## TL;DR
