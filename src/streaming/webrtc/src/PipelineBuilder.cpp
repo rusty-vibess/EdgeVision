@@ -8,40 +8,51 @@ namespace edgevision::streaming::webrtc {
 
     namespace {
 
-        std::string makeVideoBranchString(const edgevision::config::WebRtcStreamingConfig& cfg) {
+        std::string makeVideoBranchString(
+            const edgevision::config::WebRtcStreamingConfig& cfg,
+            const edgevision::config::ImageSize& imageSize
+        ) {
             // Software x264 encode: Orin Nano has no NVENC. Pin to cores 4-5
             // (WebRtcStreamingConfig.pumpCoreMask) and keep `threads=2` to fit
             // the budget. x264enc bitrate is in kbps, not bps.
             const std::uint32_t kbps = cfg.bitrateBps / 1000u;
             std::ostringstream oss;
             oss << "appsrc name=src_video is-live=true do-timestamp=true format=time"
-                << " caps=\"video/x-raw,format=RGB,width=" << cfg.width << ",height=" << cfg.height
-                << ",framerate=" << cfg.fps << "/1\""
+                << " caps=\"video/x-raw,format=RGB,width=" << imageSize.width
+                << ",height=" << imageSize.height << ",framerate=" << cfg.fps << "/1\""
                 << " ! queue max-size-buffers=2 leaky=downstream"
                 << " ! videoconvert ! video/x-raw,format=I420"
                 << " ! x264enc tune=zerolatency speed-preset=ultrafast"
                 << " bitrate=" << kbps << " threads=2"
-                << " key-int-max=" << cfg.fps << " ! video/x-h264,profile=baseline"
+                << " key-int-max=" << cfg.fps << " ! video/x-h264,profile=constrained-baseline"
                 << " ! h264parse config-interval=-1"
-                << " ! rtph264pay pt=96 config-interval=-1"
-                << " ! application/x-rtp,media=video,encoding-name=H264,payload=96"
-                << " ! sendrecv.";
+                << " ! video/x-h264,profile=constrained-baseline,stream-format=byte-stream,"
+                   "alignment=au"
+                << " ! rtph264pay name=pay_video pt=96 config-interval=-1";
             return oss.str();
         }
 
     } // namespace
 
-    std::string pipelineString(const edgevision::config::WebRtcStreamingConfig& cfg) {
+    std::string pipelineString(
+        const edgevision::config::WebRtcStreamingConfig& cfg,
+        const edgevision::config::ImageSize& imageSize
+    ) {
         std::ostringstream oss;
-        oss << makeVideoBranchString(cfg)
-            << " webrtcbin name=sendrecv stun-server=" << cfg.stunServer
-            << " bundle-policy=max-bundle";
+        oss << makeVideoBranchString(cfg, imageSize) << " webrtcbin name=sendrecv";
+        if (!cfg.stunServer.empty()) {
+            oss << " stun-server=" << cfg.stunServer;
+        }
+        oss << " bundle-policy=max-bundle";
         return oss.str();
     }
 
-    PipelineHandles buildPipeline(const edgevision::config::WebRtcStreamingConfig& cfg) {
+    PipelineHandles buildPipeline(
+        const edgevision::config::WebRtcStreamingConfig& cfg,
+        const edgevision::config::ImageSize& imageSize
+    ) {
         PipelineHandles h{};
-        const auto desc = pipelineString(cfg);
+        const auto desc = pipelineString(cfg, imageSize);
 
         GError* err = nullptr;
         h.pipeline = gst_parse_launch(desc.c_str(), &err);
@@ -57,6 +68,7 @@ namespace edgevision::streaming::webrtc {
 
         h.webrtcbin = gst_bin_get_by_name(GST_BIN(h.pipeline), "sendrecv");
         h.videoAppSrc = gst_bin_get_by_name(GST_BIN(h.pipeline), "src_video");
+        h.videoPayloader = gst_bin_get_by_name(GST_BIN(h.pipeline), "pay_video");
         return h;
     }
 

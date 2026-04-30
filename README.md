@@ -253,6 +253,12 @@ glxinfo | grep "OpenGL renderer"
 
 You should see the NVIDIA / Tegra renderer — not `llvmpipe`.
 
+
+Shell now makes this available by default
+```bash
+$ spinup_openGL.sh
+```
+
 ---
 
 ### Runtime Debugging And Performance
@@ -284,6 +290,124 @@ Cache may saturate memory on jetson:
 # When cache collects on Jetson
 sudo sync
 echo 3 | sudo tee /proc/sys/vm/drop_caches
+```
+
+May also need to set Jetson to mac performance and crank the GPU
+```bash
+sudo nvpmodel -q
+sudo nvpmodel -m 0      # 25W , 15W 0
+# Overclocks Tegra
+sudo jetson_clocks
+sudo jetson_clocks --show
+```
+
+---
+### Direct Viewer ↔ Jetson Ethernet
+
+Set static IPs on the direct Ethernet link:
+
+```text
+Viewer host: 192.168.50.1/24
+Jetson:      192.168.50.2/24
+```
+
+Viewer Ethernet adapter should be manual/static:
+
+```text
+IP:      192.168.50.1
+Subnet:  255.255.255.0
+Gateway: blank
+DNS:     blank
+```
+
+Jetson setup:
+
+```bash
+sudo nmcli con add type ethernet ifname enP8p1s0 con-name viewer-direct \
+  ipv4.method manual ipv4.addresses 192.168.50.2/24 ipv6.method ignore
+sudo nmcli con up viewer-direct
+```
+
+Quick tests:
+
+```bash
+# TCP: Jetson -> Viewer
+# Viewer: nc -lv 5001
+echo "hello" | nc 192.168.50.1 5001
+
+# UDP/WebRTC-style: Jetson -> Viewer
+# Viewer: nc -ul 5002
+echo "udp" | nc -u -w1 192.168.50.1 5002
+```
+
+WebRTC signalling should use `192.168.50.x`; STUN/TURN usually not needed on this link.
+
+#### WebRTC Direct-Link Run Command
+
+Run from the bundle root on the Jetson:
+
+```bash
+sudo env \
+  OPENSSL_CONF="$HOME/dev/edgevision/conf/openssl_webrtc_lowsec.cnf" \
+  EDGEVISION_WEBRTC_DIRECT_IPV4=192.168.50.2,192.168.50.1 \
+  G_TLS_GNUTLS_PRIORITY="NORMAL:%COMPAT" \
+  LD_LIBRARY_PATH="$PWD/lib:${LD_LIBRARY_PATH:-}" \
+  ./bin/EdgeVision --viewer-policy hot-loop --read-policy balanced --webrtc-stun none
+```
+
+- `--webrtc-stun none` keeps ICE on the direct `192.168.50.x` link.
+- `EDGEVISION_WEBRTC_DIRECT_IPV4` filters ICE to the Jetson/viewer host candidates.
+- The WebRTC data channel is enabled by default. Set
+  `EDGEVISION_WEBRTC_DISABLE_DATA_CHANNEL=1` only when isolating video-only issues.
+
+Pose updates sent over the data channel use:
+
+```json
+{"type":"pose","matrix":[16 floats]}
+```
+
+The matrix must use the InfiniTAM/ORUtils layout:
+
+```text
+[
+  r00, r10, r20, 0,
+  r01, r11, r21, 0,
+  r02, r12, r22, 0,
+  x,   y,   z,   1
+]
+```
+
+Translation is `matrix[12]`, `matrix[13]`, and `matrix[14]`; `matrix[3]`,
+`matrix[7]`, and `matrix[11]` are not translation slots for this server path.
+
+#### WebRTC Debugging
+
+Enable GStreamer media/WebRTC logging only when debugging:
+
+```bash
+sudo env \
+  GST_DEBUG_NO_COLOR=1 \
+  GST_DEBUG_FILE=/tmp/edgevision-media.log \
+  GST_DEBUG="appsrc:4,x264enc:4,h264parse:4,rtph264pay:5,webrtc*:5,basesrc:5" \
+  OPENSSL_CONF="$HOME/dev/edgevision/conf/openssl_webrtc_lowsec.cnf" \
+  EDGEVISION_WEBRTC_DIRECT_IPV4=192.168.50.2,192.168.50.1 \
+  G_TLS_GNUTLS_PRIORITY="NORMAL:%COMPAT" \
+  LD_LIBRARY_PATH="$PWD/lib:${LD_LIBRARY_PATH:-}" \
+  ./bin/EdgeVision --viewer-policy hot-loop --read-policy balanced --webrtc-stun none
+```
+
+Useful log slices:
+
+```bash
+grep -Ei "not-negotiated|Internal data stream error|dtls|ssl|fatal|error|rtph264pay|src_video" \
+  /tmp/edgevision-media.log | tail -200
+```
+
+Capture the direct-link DTLS/ICE packets:
+
+```bash
+sudo tcpdump -Z root -i any -s 0 -w /tmp/edgevision-dtls.pcap \
+  'udp and host 192.168.50.1 and host 192.168.50.2'
 ```
 
 ---

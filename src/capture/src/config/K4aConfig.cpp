@@ -14,25 +14,34 @@ namespace edgevision::capture {
             return K4A_IMAGE_FORMAT_COLOR_BGRA32;
         }
 
-        [[nodiscard]] k4a_color_resolution_t colorResolution(
-            edgevision::config::CaptureColorResolution resolution
+        [[nodiscard]] std::optional<k4a_color_resolution_t> colorResolution(
+            const edgevision::config::ImageSize& imageSize
         ) {
-            switch (resolution) {
-                case edgevision::config::CaptureColorResolution::P720:
-                    return K4A_COLOR_RESOLUTION_720P;
-                case edgevision::config::CaptureColorResolution::P1080:
-                    return K4A_COLOR_RESOLUTION_1080P;
-                case edgevision::config::CaptureColorResolution::P1440:
-                    return K4A_COLOR_RESOLUTION_1440P;
-                case edgevision::config::CaptureColorResolution::P1536:
-                    return K4A_COLOR_RESOLUTION_1536P;
-                case edgevision::config::CaptureColorResolution::P2160:
-                    return K4A_COLOR_RESOLUTION_2160P;
-                case edgevision::config::CaptureColorResolution::P3072:
-                    return K4A_COLOR_RESOLUTION_3072P;
+            if (imageSize == edgevision::config::ImageSize{1280, 720}) {
+                return K4A_COLOR_RESOLUTION_720P;
             }
 
-            return K4A_COLOR_RESOLUTION_720P;
+            if (imageSize == edgevision::config::ImageSize{1920, 1080}) {
+                return K4A_COLOR_RESOLUTION_1080P;
+            }
+
+            if (imageSize == edgevision::config::ImageSize{2560, 1440}) {
+                return K4A_COLOR_RESOLUTION_1440P;
+            }
+
+            if (imageSize == edgevision::config::ImageSize{2048, 1536}) {
+                return K4A_COLOR_RESOLUTION_1536P;
+            }
+
+            if (imageSize == edgevision::config::ImageSize{3840, 2160}) {
+                return K4A_COLOR_RESOLUTION_2160P;
+            }
+
+            if (imageSize == edgevision::config::ImageSize{4096, 3072}) {
+                return K4A_COLOR_RESOLUTION_3072P;
+            }
+
+            return std::nullopt;
         }
 
         [[nodiscard]] k4a_depth_mode_t depthMode(edgevision::config::CaptureDepthMode mode) {
@@ -67,12 +76,19 @@ namespace edgevision::capture {
 
     } // namespace
 
-    k4a_device_configuration_t makeK4aDeviceConfig(
-        const edgevision::config::CaptureCameraConfig& config
+    std::optional<k4a_device_configuration_t> makeK4aDeviceConfig(
+        const edgevision::config::CaptureCameraConfig& config,
+        const edgevision::config::ImageSize& imageSize
     ) {
+        const std::optional<k4a_color_resolution_t> resolvedColorResolution =
+            colorResolution(imageSize);
+        if (!resolvedColorResolution.has_value()) {
+            return std::nullopt;
+        }
+
         k4a_device_configuration_t deviceConfig = K4A_DEVICE_CONFIG_INIT_DISABLE_ALL;
         deviceConfig.color_format = colorFormat(config.colorFormat);
-        deviceConfig.color_resolution = colorResolution(config.colorResolution);
+        deviceConfig.color_resolution = *resolvedColorResolution;
         deviceConfig.depth_mode = depthMode(config.depthMode);
         deviceConfig.camera_fps = frameRate(config.frameRate);
         deviceConfig.synchronized_images_only = config.synchronizedImagesOnly;
