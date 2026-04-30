@@ -140,6 +140,19 @@ namespace edgevision::config {
                 continue;
             }
 
+            if (arg == "--webrtc-stun") {
+                if (i + 1 >= argc) {
+                    result.error = "Missing value for --webrtc-stun";
+                    return result;
+                }
+
+                const std::string_view stunValue(argv[i + 1]);
+                result.config.streaming.webrtc.stunServer =
+                    stunValue == "none" ? std::string{} : std::string{stunValue};
+                ++i;
+                continue;
+            }
+
             if (arg == "--read-policy") {
                 if (i + 1 >= argc) {
                     result.error = "Missing value for --read-policy";

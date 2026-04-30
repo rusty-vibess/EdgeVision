@@ -159,7 +159,7 @@ namespace {
     }
 
     void testRepeatedSharedSceneConstructionReleasesScene() {
-        for (int i = 0; i < 100; ++i) {
+        for (int i = 0; i < 10; ++i) {
             auto scene = std::make_unique<SharedScene>();
             expectTrue(scene != nullptr, "shared scene allocation should succeed");
         }

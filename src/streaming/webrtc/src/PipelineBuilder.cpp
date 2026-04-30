@@ -24,11 +24,11 @@ namespace edgevision::streaming::webrtc {
                 << " ! videoconvert ! video/x-raw,format=I420"
                 << " ! x264enc tune=zerolatency speed-preset=ultrafast"
                 << " bitrate=" << kbps << " threads=2"
-                << " key-int-max=" << cfg.fps << " ! video/x-h264,profile=baseline"
+                << " key-int-max=" << cfg.fps << " ! video/x-h264,profile=constrained-baseline"
                 << " ! h264parse config-interval=-1"
-                << " ! rtph264pay pt=96 config-interval=-1"
-                << " ! application/x-rtp,media=video,encoding-name=H264,payload=96"
-                << " ! sendrecv.";
+                << " ! video/x-h264,profile=constrained-baseline,stream-format=byte-stream,"
+                   "alignment=au"
+                << " ! rtph264pay name=pay_video pt=96 config-interval=-1";
             return oss.str();
         }
 
@@ -39,9 +39,11 @@ namespace edgevision::streaming::webrtc {
         const edgevision::config::ImageSize& imageSize
     ) {
         std::ostringstream oss;
-        oss << makeVideoBranchString(cfg, imageSize)
-            << " webrtcbin name=sendrecv stun-server=" << cfg.stunServer
-            << " bundle-policy=max-bundle";
+        oss << makeVideoBranchString(cfg, imageSize) << " webrtcbin name=sendrecv";
+        if (!cfg.stunServer.empty()) {
+            oss << " stun-server=" << cfg.stunServer;
+        }
+        oss << " bundle-policy=max-bundle";
         return oss.str();
     }
 
@@ -66,6 +68,7 @@ namespace edgevision::streaming::webrtc {
 
         h.webrtcbin = gst_bin_get_by_name(GST_BIN(h.pipeline), "sendrecv");
         h.videoAppSrc = gst_bin_get_by_name(GST_BIN(h.pipeline), "src_video");
+        h.videoPayloader = gst_bin_get_by_name(GST_BIN(h.pipeline), "pay_video");
         return h;
     }
 

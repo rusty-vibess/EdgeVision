@@ -17,7 +17,7 @@ namespace edgevision::config {
         std::uint16_t signallingPort = 6689;
         std::uint32_t fps = 30;
         std::uint32_t bitrateBps = 1500000;
-        std::string stunServer = "stun://stun.l.google.com:19302";
+        std::string stunServer{};
         std::vector<int> pumpCoreMask = {4, 5};
     };
 
