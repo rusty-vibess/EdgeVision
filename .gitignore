@@ -1,6 +1,9 @@
 # junk
 .DS_Store
 
+# private local docs
+docs/
+
 # build and cmake
 build
 build-local

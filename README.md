@@ -1,94 +1,144 @@
-### Workflow (Recommended)
+# EdgeVision
 
-1. Create or update the sysroot (see "Sysroot").
-2. Populate the overlay in `third_party/<SYSROOT_VERSION>-overlay`.
-3. Add Python wheels (see "Sysroot" → Overlay).
-4. Build source deps (see "Building" → Build Deps).
-5. Run toolchain smoke tests.
+EdgeVision is a Jetson-targeted RGB-D reconstruction and remote viewing prototype. It captures synchronized Azure Kinect/K4A colour and depth frames, integrates them into an InfiniTAM TSDF scene with CUDA support, renders free-view RGB output, and exposes that output to a remote viewer over WebRTC.
+
+## Status
+
+**v0.0.1 pre-release.**
+
+This repository is the public checkpoint for the Presentation/Showcase build. It is relatively stable for the showcased workflow, but it is not the final v1 build.
+
+Known headline issue: the WebRTC path can establish a stable connection and then repeatedly disconnect. v1 is expected to focus on server and streaming stability. v2 is expected to pivot toward the FPGA build.
+
+## What It Does
+
+- Captures synchronized RGB-D frames from an Azure Kinect/K4A device.
+- Aligns, validates, and stores frames for reconstruction.
+- Integrates incoming frames into an InfiniTAM TSDF scene.
+- Maintains thread-safe scene, frame, viewer-pose, and render-output state.
+- Renders RGB views from the reconstructed scene.
+- Streams rendered output over WebRTC, with pose updates arriving over the WebRTC data channel.
+- Includes a legacy TCP render server module for the older remote-viewer protocol; the showcase runtime path is WebRTC.
+
+## Architecture
+
+- `src/capture`: K4A device access, capture handles, RGB-D frame assembly, validation, alignment, and background ingest into `FrameStore`.
+- `src/model`: synchronized frame, scene, scene-version, viewer-pose, and render-output stores shared across runtime threads.
+- `src/builder`: frame consumption and InfiniTAM integration into the shared TSDF scene.
+- `src/viewer`: InfiniTAM free-view rendering from `ViewerPoseStore` into `RenderOutputStore`.
+- `src/streaming`: legacy single-client TCP render server module, not currently started by `src/main.cpp`.
+- `src/streaming/webrtc`: WebSocket signalling, GStreamer `webrtcbin` pipeline setup, H.264 video transport, and data-channel pose updates.
+- `src/app`: runtime helpers for viewer-pose seeding and debug frame dumps.
+
+Useful local API entrypoints:
+
+- [config API](src/config/include/config/README.md)
+- [model scene API](src/model/include/model/scene/README.md)
+- [model viewer API](src/model/include/model/viewer/README.md)
+- [viewer API](src/viewer/include/viewer/README.md)
+- [WebRTC streaming API](src/streaming/webrtc/include/streaming/webrtc/README.md)
+- [third-party layout](third_party/README.md)
+
+## Requirements
+
+This project is target-specific and assumes a Jetson runtime environment.
+
+- NVIDIA Jetson target userspace, currently mirrored as a JetPack `r36.4.4` sysroot.
+- CUDA in the target sysroot. The current toolchain expects CUDA 12.6 under `/usr/local/cuda-12.6`.
+- Azure Kinect/K4A hardware and K4A runtime dependencies.
+- OpenGL via GLX and an active X11 `DISPLAY`; K4A requires this even for headless-style runs.
+- CMake 3.22+ for the full workflow, Ninja, GCC/G++ `aarch64-linux-gnu`, `rsync`, and `symlinks`.
+- Docker/devcontainer workflow for the cross-build environment.
+- GStreamer/WebRTC dependencies from the Jetson sysroot.
+- A sysroot overlay mounted at `/opt/jetson-sysroot-overlay`.
+
+The devcontainer is defined in `.devcontainer/` and `docker-compose.yml`. It mounts:
+
+```text
+./sysroots/r36.4.4              -> /opt/jetson-sysroot
+./third_party/r36.4.4-overlay   -> /opt/jetson-sysroot-overlay
+```
+
+## Workflow
+
+Recommended order:
+
+1. Create or update the Jetson sysroot.
+2. Populate `third_party/<SYSROOT_VERSION>-overlay`.
+3. Add required Python wheels and target-platform binaries.
+4. Build third-party source dependencies into the overlay.
+5. Run toolchain smoke tests where applicable.
 6. Build the project.
+7. Build a bundle and run it on the Jetson.
 
----
+## Sysroot
 
-### Sysroot
+EdgeVision cross-compiles against a Jetson sysroot so the toolchain sees the same headers, libraries, and linker layout as the target device.
 
-We cross-compile against a Jetson sysroot (JetPack r36.4.4 at time of writing) so the toolchain always sees the same headers, libraries, and linker layout—independent of the host.
+### Create The Sysroot
 
-The sysroot is built by mirroring the Jetson root filesystem with `rsync`, then applying deterministic cleanup to make it relocatable.
-
----
-
-#### 1) Create the sysroot (host)
+From the host:
 
 ```bash
-# Or equivalent rsync binary
-#
-# --numeric-ids preserves UID/GID consistency between host and target
 /opt/homebrew/bin/rsync -aH --numeric-ids --info=progress2 \
   --exclude={"/dev/*","/proc/*","/sys/*","/run/*","/tmp/*","/media/*","/mnt/*","/lost+found"} \
   <USER>@<JETSON_IP>:/ ./sysroots/<SYSROOT_VERSION>
 ```
 
-* Result: `./sysroots/<SYSROOT_VERSION>` is a snapshot of the Jetson userspace
-* Exclusions: virtual filesystems + runtime-only mounts
+Result:
 
----
+```text
+./sysroots/<SYSROOT_VERSION>
+```
 
-#### 2) Post-process (container)
+### Post-Process The Sysroot
 
 Run these inside the cross-compilation container. The build expects:
 
-* Sysroot: `/opt/jetson-sysroot`
-* Overlay: `/opt/jetson-sysroot-overlay`
+```text
+Sysroot: /opt/jetson-sysroot
+Overlay: /opt/jetson-sysroot-overlay
+```
 
-The rsynced filesystem contains absolute symlinks (e.g. `/lib/...`) which break relocation.
+Rewrite absolute symlinks in the rsynced filesystem:
 
 ```bash
 symlinks -crv ./sysroots/<SYSROOT_VERSION>
 ```
 
-`update-alternatives` stores absolute paths that survive both `rsync` and symlink rewriting.
+Preview and then apply `update-alternatives` rewrites:
 
 ```bash
-# DRY_RUN=1 previews changes without mutating files
 SYSROOT=/workspaces/repo/sysroots/<SYSROOT_VERSION> DRY_RUN=1 \
   /workspaces/repo/scripts/rewrite-alternatives.sh
 ```
 
-* Mainly affects toolchain-adjacent binaries (`gcc`, `ld`, `python`)
-* Once the output looks sane, rerun with `DRY_RUN=0` (or unset)
+Once the output looks correct, rerun with `DRY_RUN=0` or unset.
 
----
+### Overlay
 
-#### 3) Overlay
+Use the overlay for Jetson-specific Python wheels, project-pinned binaries or libraries, source-built dependency installs, and anything that should not be copied directly from the device snapshot.
 
-Not everything should come from the device snapshot. Use the overlay for:
-
-* Jetson-specific Python wheels
-* Project-pinned binaries or libraries
-* Anything awkward or unstable to reproduce via rsync
-
-The overlay is mounted alongside the sysroot during compilation. If you ship shared libraries via overlay, ensure the final binaries can locate them on-device (typically via `RPATH` or loader configuration).
-
-**Known dependency: PyTorch (Jetson wheel)**
-
-Install into a Jetson-compatible venv:
+Known dependency: PyTorch Jetson wheel.
 
 ```bash
 pip install torch==2.8.0 --index-url https://pypi.jetson-ai-lab.io/jp6/cu126
 ```
 
-Copy into the project overlay:
+Copy into the matching overlay:
 
-* From: `<VENV>/lib/python3.10/site-packages/torch`
-* To: `third_party/<SYSROOT_VERSION>-overlay/site-packages/torch`
+```text
+From: <VENV>/lib/python3.10/site-packages/torch
+To:   third_party/<SYSROOT_VERSION>-overlay/site-packages/torch
+```
 
 See [third_party/README.md](third_party/README.md) for overlay layout details.
 
----
+## Build From Source
 
-### Building
+These commands are intended to run inside the devcontainer or equivalent cross-build environment.
 
-#### Build Deps
+### Build Third-Party Dependencies
 
 ```bash
 cmake -S cmake/third_party \
@@ -100,7 +150,9 @@ cmake -S cmake/third_party \
 && cmake --build build-deps --target install
 ```
 
-#### Build Project Debug
+### Build Project Debug
+
+`Debug` is the default CMake build type and enables address/undefined sanitizers for project code.
 
 ```bash
 cmake -S . \
@@ -108,10 +160,12 @@ cmake -S . \
   -G Ninja \
   -DCMAKE_TOOLCHAIN_FILE=/workspaces/repo/toolchains/jetson/jetson-aarch64.cmake \
   -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-  && cmake --build build -j2
+&& cmake --build build -j4
 ```
 
-#### Build Project RelWithDebInfo
+### Build Project RelWithDebInfo
+
+Use this for runtime validation when sanitizer noise from CUDA or target libraries gets in the way.
 
 ```bash
 cmake -S . \
@@ -121,42 +175,171 @@ cmake -S . \
   -DCMAKE_BUILD_TYPE=RelWithDebInfo \
   -DENABLE_TESTS=OFF \
   -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-&& cmake --build build-relwithdebinfo -j2
+&& cmake --build build-relwithdebinfo -j4
 ```
 
-#### Bundle
+### Bundle
 
 ```bash
 cmake --build build --target bundle
 cmake --build build-relwithdebinfo --target bundle
 ```
 
-#### Patches
+The bundle target creates a self-contained runtime directory under the build directory, including the `EdgeVision` binary and selected runtime libraries from the overlay.
 
-Some deps require source changes. Use patches to capture those diffs, place them in
-`patches/`, and ensure they are collected and applied by the build.
+### Patches
 
-Generate patches like this:
+Some dependencies require source changes. Keep those diffs in `patches/` and ensure they are collected by the third-party build.
 
 ```bash
-diff -u   .../<FILE>.orig   .../<FILE>   > /workspaces/repo/patches/<FILE>-<STUB>.patch
+diff -u .../<FILE>.orig .../<FILE> > /workspaces/repo/patches/<FILE>-<STUB>.patch
 ```
 
----
+## Running
 
-### Tests
+Run from the bundle root on the Jetson:
 
-Tests are built by default. If building for `Release` or you do not want tests ensure to pass `-DENABLE_TESTS=OFF` at configuration time.
+```bash
+sudo env LD_LIBRARY_PATH="$PWD/lib:${LD_LIBRARY_PATH:-}" ./bin/EdgeVision
+```
 
-Tests if available will automatically be bundled by `cmake --build build --target bundle`.
+Usage:
 
-To run tests utilise `ctest --test-dir tests --output-on-failure` inside the target bundle directory.
+```text
+./EdgeVision [--port 6688] [--enable-tcp-streaming]
+             [--webrtc-port 6689] [--disable-webrtc]
+             [--webrtc-stun url|none]
+             [--disable-capture]
+             [--read-policy greedy|balanced]
+             [--viewer-policy event|hot-loop]
+             [--enable-debug]
+             [--debug-frames N]
+```
 
-### CUDA Tests And Sanitizers
+Current CLI options:
 
-`Debug` is the default development build and enables sanitizers across project code and tests. This is useful for application debugging, but CUDA runtime/device code can produce sanitizer noise that is not always actionable.
+- `--port <1-65535>`: set the legacy TCP render-server config port. Default: `6688`.
+- `--enable-tcp-streaming`: set the legacy TCP streaming config flag. The current `src/main.cpp` path does not start the TCP server.
+- `--webrtc-port <1-65535>`: set the WebRTC signalling port. Default: `6689`.
+- `--disable-webrtc`: disable WebRTC. Default: enabled.
+- `--webrtc-stun <url|none>`: set a STUN server, or use `none` for direct/local links. Default: none.
+- `--disable-capture`: parsed, but the current application exits because capture is required.
+- `--read-policy <greedy|balanced>`: set shared-scene read scheduling. Default: `greedy`.
+- `--viewer-policy <event|hot-loop>`: choose event-driven rendering or periodic rendering. Default: `event`.
+- `--enable-debug`: enable viewer frame dumping. Default dump count: `5` unless `--debug-frames` is set.
+- `--debug-frames <N>`: enable debug dumping and stop after `N` rendered frames.
 
-Use a separate `RelWithDebInfo` build directory when validating tests (especially CUDA heavy ones) without sanitizers:
+Runtime defaults include a `1280x720` image size and WebRTC signalling on `0.0.0.0:6689`.
+
+### GLX/X11 Requirement
+
+`k4a` requires OpenGL. OpenGL via GLX requires an active X11 `DISPLAY` context.
+
+On Jetson, X will not start unless a display is detected. In a headless setup, either plug the Jetson into a monitor via DisplayPort or use a headless DP dongle that spoofs EDID.
+
+Creating the required `DISPLAY` context from a terminal:
+
+```bash
+sudo systemctl stop gdm3
+ls /tmp/.X11-unix/
+Xorg :0 -nolisten tcp &
+export DISPLAY=:0
+glxinfo | grep "OpenGL renderer"
+```
+
+You should see the NVIDIA/Tegra renderer, not `llvmpipe`.
+
+The local shell setup may also provide:
+
+```bash
+spinup_openGL.sh
+```
+
+### Direct Viewer To Jetson Ethernet
+
+Set static IPs on the direct Ethernet link:
+
+```text
+Viewer host: 192.168.50.1/24
+Jetson:      192.168.50.2/24
+```
+
+Jetson setup:
+
+```bash
+sudo nmcli con add type ethernet ifname enP8p1s0 con-name viewer-direct \
+  ipv4.method manual ipv4.addresses 192.168.50.2/24 ipv6.method ignore
+sudo nmcli con up viewer-direct
+```
+
+Quick link tests:
+
+```bash
+# Viewer: nc -lv 5001
+echo "hello" | nc 192.168.50.1 5001
+
+# Viewer: nc -ul 5002
+echo "udp" | nc -u -w1 192.168.50.1 5002
+```
+
+Direct-link WebRTC run command:
+
+```bash
+sudo env \
+  OPENSSL_CONF="<OPENSSL_CONF_PATH>" \
+  EDGEVISION_WEBRTC_DIRECT_IPV4=192.168.50.2,192.168.50.1 \
+  G_TLS_GNUTLS_PRIORITY="NORMAL:%COMPAT" \
+  LD_LIBRARY_PATH="$PWD/lib:${LD_LIBRARY_PATH:-}" \
+  ./bin/EdgeVision --viewer-policy hot-loop --read-policy balanced --webrtc-stun none
+```
+
+Notes:
+
+- `--webrtc-stun none` keeps ICE on the direct `192.168.50.x` link.
+- `EDGEVISION_WEBRTC_DIRECT_IPV4` filters ICE to the Jetson/viewer host candidates.
+- `EDGEVISION_WEBRTC_DISABLE_DATA_CHANNEL=1` disables the data channel for video-only debugging.
+- `OPENSSL_CONF` is only needed when using a custom OpenSSL compatibility config.
+
+Pose updates sent over the data channel use:
+
+```json
+{"type":"pose","matrix":[16 floats]}
+```
+
+The matrix must use the InfiniTAM/ORUtils layout:
+
+```text
+[
+  r00, r10, r20, 0,
+  r01, r11, r21, 0,
+  r02, r12, r22, 0,
+  x,   y,   z,   1
+]
+```
+
+Translation is `matrix[12]`, `matrix[13]`, and `matrix[14]`.
+
+## Tests
+
+Tests are built by default. Disable them with:
+
+```bash
+-DENABLE_TESTS=OFF
+```
+
+Bundled tests are included by:
+
+```bash
+cmake --build build --target bundle
+```
+
+Run tests from the target bundle directory:
+
+```bash
+ctest --test-dir tests --output-on-failure
+```
+
+For CUDA-heavy validation without debug sanitizers:
 
 ```bash
 cmake -S . \
@@ -169,7 +352,7 @@ cmake -S . \
 && cmake --build build-relwithdebinfo-tests -j3
 ```
 
-If you still want the `Debug` sanitizer coverage, the `Debug` bundle includes `cmake/suppressions`. From the bundle root you can rerun tests with the CUDA suppression file:
+If using the debug bundle, rerun tests with the CUDA leak-sanitizer suppression file:
 
 ```bash
 cd build/bundle
@@ -177,25 +360,23 @@ LSAN_OPTIONS="suppressions=$(pwd)/cmake/suppressions/lsan_cuda.supp:print_suppre
 ctest --test-dir tests --output-on-failure
 ```
 
-Finally, for CUDA-specific diagnostics, run `compute-sanitizer` directly against the target test binary (`RelWithDebInfo` is best to avoid conflict with CUDA sanitizers and GCC ones):
+For CUDA-specific diagnostics:
 
 ```bash
 for tool in memcheck racecheck initcheck synccheck; do
-    echo "Running $tool..."
     compute-sanitizer --tool "$tool" \
-    --leak-check full \
-    --report-api-errors all \
-    --log-file "sanitizer_${tool}_log.txt" \
-    "./tests/<TEST_BIN>" >> "sanitizer_${tool}_log.txt" 2>&1 || break
+      --leak-check full \
+      --report-api-errors all \
+      --log-file "sanitizer_${tool}_log.txt" \
+      "./tests/<TEST_BIN>" >> "sanitizer_${tool}_log.txt" 2>&1 || break
 done
-
 ```
 
-`ASAN_OPTIONS=alloc_dealloc_mismatch=0` to stop builder_tests error in InfiniTAM upstream.
+`ASAN_OPTIONS=alloc_dealloc_mismatch=0` is currently needed for the `builder_tests` InfiniTAM upstream allocation mismatch.
 
----
+### Toolchain Smoke Tests
 
-### Toolchain Smoke Tests (NEEDS UPDATE)
+These commands are retained from the current workflow, but the smoke-test setup needs updating after recent linking changes.
 
 Configure:
 
@@ -219,293 +400,93 @@ Build:
 cmake --build /workspaces/repo/toolchain-tests/build
 ```
 
----
+## Container Workflow
 
-### Runtime Info
+The recommended container path is the VS Code Dev Containers extension.
 
-`k4a` requires OpenGL.
-OpenGL (via GLX) requires an active X11 `DISPLAY` context.
-
-On Jetson, X will not start unless a display is detected. In a headless build, you must either:
-* Plug the Jetson into a monitor via DisplayPort, or
-* Use a headless DP dongle that spoofs EDID
-
-There is no runtime-only software workaround if the dependency requires GLX.
-
-Creating the required DISPLAY context from terminal:
+Manual lifecycle:
 
 ```bash
-# JetPack boots gdm3 automatically when a display is detected — stop it
-sudo systemctl stop gdm3
+docker buildx create --name docker-platform-builder --use
+docker buildx inspect --bootstrap
 
-# (Optional) prevent it restarting on reboot
-# sudo systemctl disable gdm3
-
-# Confirm no X11 instances are running
-ls /tmp/.X11-unix/
-# Start a minimal X server
-Xorg :0 -nolisten tcp &
-# Set DISPLAY for this shell
-export DISPLAY=:0
-# Confirm hardware OpenGL is active
-glxinfo | grep "OpenGL renderer"
+docker compose build
+docker compose up
+docker exec -it jetson-dev bash
 ```
 
-You should see the NVIDIA / Tegra renderer — not `llvmpipe`.
+## Runtime Debugging
 
-
-Shell now makes this available by default
-```bash
-$ spinup_openGL.sh
-```
-
----
-
-### Runtime Debugging And Performance
-
-Perf is available on the Jetson form metric dumping.
-
-For gdb:
+From the bundle root:
 
 ```bash
-sudo LD_LIBRARY_PATH="$PWD/lib" gdb --args ./bin/EdgeVision --enable-debud --debug-frames 15
-# Run with perf stats
-sudo env LD_LIBRARY_PATH="$PWD/lib:${LD_LIBRARY_PATH:-}" perf stat -d ./bin/EdgeVision   --enable-debug   --viewer-policy hot-loop   --debug-frames 15
+sudo LD_LIBRARY_PATH="$PWD/lib" gdb --args ./bin/EdgeVision --enable-debug --debug-frames 15
 ```
 
-```gdb
-
-show env LD_LIBRARY_PATH
-LD_LIBRARY_PATH = path/to/bundle/lib
-# Then standard gdb style debugging from there
-# Useful functions to stop on
-edgevision::model::frame::FrameStore::submitFrame(edgevision::model::frame::Frame)
-# Useful tooling for dbg
-dump binary memory /output/file.bin hex hex + offset
-```
-
-Cache may saturate memory on jetson:
+With `perf`:
 
 ```bash
-# When cache collects on Jetson
-sudo sync
-echo 3 | sudo tee /proc/sys/vm/drop_caches
+sudo env LD_LIBRARY_PATH="$PWD/lib:${LD_LIBRARY_PATH:-}" \
+  perf stat -d ./bin/EdgeVision --enable-debug --viewer-policy hot-loop --debug-frames 15
 ```
 
-May also need to set Jetson to mac performance and crank the GPU
-```bash
-sudo nvpmodel -q
-sudo nvpmodel -m 0      # 25W , 15W 0
-# Overclocks Tegra
-sudo jetson_clocks
-sudo jetson_clocks --show
-```
-
----
-### Direct Viewer ↔ Jetson Ethernet
-
-Set static IPs on the direct Ethernet link:
-
-```text
-Viewer host: 192.168.50.1/24
-Jetson:      192.168.50.2/24
-```
-
-Viewer Ethernet adapter should be manual/static:
-
-```text
-IP:      192.168.50.1
-Subnet:  255.255.255.0
-Gateway: blank
-DNS:     blank
-```
-
-Jetson setup:
-
-```bash
-sudo nmcli con add type ethernet ifname enP8p1s0 con-name viewer-direct \
-  ipv4.method manual ipv4.addresses 192.168.50.2/24 ipv6.method ignore
-sudo nmcli con up viewer-direct
-```
-
-Quick tests:
-
-```bash
-# TCP: Jetson -> Viewer
-# Viewer: nc -lv 5001
-echo "hello" | nc 192.168.50.1 5001
-
-# UDP/WebRTC-style: Jetson -> Viewer
-# Viewer: nc -ul 5002
-echo "udp" | nc -u -w1 192.168.50.1 5002
-```
-
-WebRTC signalling should use `192.168.50.x`; STUN/TURN usually not needed on this link.
-
-#### WebRTC Direct-Link Run Command
-
-Run from the bundle root on the Jetson:
-
-```bash
-sudo env \
-  OPENSSL_CONF="$HOME/dev/edgevision/conf/openssl_webrtc_lowsec.cnf" \
-  EDGEVISION_WEBRTC_DIRECT_IPV4=192.168.50.2,192.168.50.1 \
-  G_TLS_GNUTLS_PRIORITY="NORMAL:%COMPAT" \
-  LD_LIBRARY_PATH="$PWD/lib:${LD_LIBRARY_PATH:-}" \
-  ./bin/EdgeVision --viewer-policy hot-loop --read-policy balanced --webrtc-stun none
-```
-
-- `--webrtc-stun none` keeps ICE on the direct `192.168.50.x` link.
-- `EDGEVISION_WEBRTC_DIRECT_IPV4` filters ICE to the Jetson/viewer host candidates.
-- The WebRTC data channel is enabled by default. Set
-  `EDGEVISION_WEBRTC_DISABLE_DATA_CHANNEL=1` only when isolating video-only issues.
-
-Pose updates sent over the data channel use:
-
-```json
-{"type":"pose","matrix":[16 floats]}
-```
-
-The matrix must use the InfiniTAM/ORUtils layout:
-
-```text
-[
-  r00, r10, r20, 0,
-  r01, r11, r21, 0,
-  r02, r12, r22, 0,
-  x,   y,   z,   1
-]
-```
-
-Translation is `matrix[12]`, `matrix[13]`, and `matrix[14]`; `matrix[3]`,
-`matrix[7]`, and `matrix[11]` are not translation slots for this server path.
-
-#### WebRTC Debugging
-
-Enable GStreamer media/WebRTC logging only when debugging:
+WebRTC/GStreamer logging:
 
 ```bash
 sudo env \
   GST_DEBUG_NO_COLOR=1 \
   GST_DEBUG_FILE=/tmp/edgevision-media.log \
   GST_DEBUG="appsrc:4,x264enc:4,h264parse:4,rtph264pay:5,webrtc*:5,basesrc:5" \
-  OPENSSL_CONF="$HOME/dev/edgevision/conf/openssl_webrtc_lowsec.cnf" \
+  OPENSSL_CONF="<OPENSSL_CONF_PATH>" \
   EDGEVISION_WEBRTC_DIRECT_IPV4=192.168.50.2,192.168.50.1 \
   G_TLS_GNUTLS_PRIORITY="NORMAL:%COMPAT" \
   LD_LIBRARY_PATH="$PWD/lib:${LD_LIBRARY_PATH:-}" \
   ./bin/EdgeVision --viewer-policy hot-loop --read-policy balanced --webrtc-stun none
 ```
 
-Useful log slices:
+Useful log slice:
 
 ```bash
 grep -Ei "not-negotiated|Internal data stream error|dtls|ssl|fatal|error|rtph264pay|src_video" \
   /tmp/edgevision-media.log | tail -200
 ```
 
-Capture the direct-link DTLS/ICE packets:
+Direct-link DTLS/ICE capture:
 
 ```bash
 sudo tcpdump -Z root -i any -s 0 -w /tmp/edgevision-dtls.pcap \
   'udp and host 192.168.50.1 and host 192.168.50.2'
 ```
 
----
-
-### Container Workflow
-
-Since this repo uses `.devcontainer`, it’s recommended to let the VS Code extension handle container lifecycle.
-
-Information for manual container management:
+Jetson performance helpers:
 
 ```bash
-# Navigate to this project
-cd path/to/repo
-
-# Buildx is required to use the `platform:` field in docker-compose.yml
-docker buildx create --name docker-platform-builder --use
-docker buildx inspect --bootstrap
-
-docker compose build
-docker compose up
+sudo nvpmodel -q
+sudo nvpmodel -m 0
+sudo jetson_clocks
+sudo jetson_clocks --show
 ```
 
-Shell access:
+## Known Limitations
 
-```bash
-docker exec -it jetson-dev bash
-```
+- WebRTC can connect and then repeatedly disconnect; this is the main v0.0.1 server issue.
+- This is a showcase checkpoint, not the final v1 release.
+- The build and runtime are tightly coupled to Jetson, JetPack `r36.4.4`, CUDA, K4A, and GLX/X11.
+- Capture is currently required; `--disable-capture` is parsed but exits at startup.
+- Legacy TCP streaming options are parsed, but the current `src/main.cpp` path does not start the TCP server.
+- Toolchain smoke tests are marked as needing update after recent linking changes.
+- Bundled test environment propagation still needs cleanup.
+- Third-party licensing needs a full audit before this repository is presented as contributor-ready open source.
 
----
+## Roadmap
 
-### Dev Info
+- v1: fix WebRTC/server stability, tighten bundled runtime/test environment handling, and complete release hygiene.
+- v2: pivot the build toward the FPGA implementation.
 
-For LSP support, you need a `compile_commands.json` at the repo root. The simplest
-way is to configure with `-DCMAKE_EXPORT_COMPILE_COMMANDS=ON` and then symlink the
-generated file.
+## Release Notes
 
-```bash
-# From repo root
-ln -s .../build/compile_commands.json .
-```
+See [RELEASE_NOTES.md](RELEASE_NOTES.md).
 
-Then restart clangd extension in vscode.
+## Licence
 
----
-
-### Cheatsheet
-
-Quick commands you may want to grab:
-
-```bash
-# TODO: Toolchain-tests need to be updated to new linking methods
-# Configure + build toolchain tests
-cmake -S /workspaces/repo/toolchain-tests \
-  -B /workspaces/repo/toolchain-tests/build \
-  -G Ninja \
-  -DCMAKE_TOOLCHAIN_FILE=/workspaces/repo/toolchains/jetson/jetson-aarch64.cmake \
-  -DTORCH_RUNTIME_LIB_DIR=/site-packages/torch/lib \
-  && cmake --build /workspaces/repo/toolchain-tests/build
-
-# Configure + build third-party deps into the overlay
-cmake -S cmake/third_party \
-  -B build-deps \
-  -G Ninja \
-  -DCMAKE_BUILD_TYPE=Release \
-  -DCMAKE_INSTALL_PREFIX=/opt/jetson-sysroot-overlay/install \
-  -DCMAKE_TOOLCHAIN_FILE=/workspaces/repo/toolchains/jetson/jetson-aarch64.cmake \
-&& cmake --build build-deps --target install
-
-# Configure + build project Debug
-cmake -S . \
-  -B build \
-  -G Ninja \
-  -DCMAKE_TOOLCHAIN_FILE=/workspaces/repo/toolchains/jetson/jetson-aarch64.cmake \
-  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-&& cmake --build build -j3
-
-# Configure + build RelWithDebInfo
-cmake -S . \
-  -B build-relwithdebinfo \
-  -G Ninja \
-  -DCMAKE_TOOLCHAIN_FILE=/workspaces/repo/toolchains/jetson/jetson-aarch64.cmake \
-  -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-  -DENABLE_TESTS=OFF \
-  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-&& cmake --build build-relwithdebinfo -j3 --target bundle
-
-# Individual build commands
-cmake --build /workspaces/repo/toolchain-tests/build
-cmake --build build-deps --target install
-cmake --build build
-# Build to bundle for export
-cmake --build build --target bundle
-# scp bundle to jetson
-scp -r build/bundle nano:dev/latest_edgevision_bundle
-# scp just latest bin to jetson (saves writes)
-scp -r build/bundle/bin/* nano:dev/latest_edgevision_bundle/bundle/bin
-# Run programme from bundle root
-sudo LD_LIBRARY_PATH="$PWD/lib:$LD_LIBRARY_PATH" ./bin/EdgeVision
-# Debug
-gdb --args ./bin/EdgeVision
-```
+Licence TBD. Public visibility of this repository does not yet grant permission to use, copy, modify, or redistribute the code. Choose and add a real `LICENSE` before encouraging external reuse or contributions.
