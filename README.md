@@ -1,3 +1,5 @@
+[![Showcase Demonstrator](https://img.shields.io/badge/Showcase%20Demonstrator-v0.0.1--pre--release-orange?style=for-the-badge&logo=github)](https://github.com/rusty-vibess/EdgeVision/releases/tag/v0.0.1)
+
 # EdgeVision
 
 EdgeVision is a Jetson-targeted RGB-D reconstruction and remote viewing prototype. It captures synchronized Azure Kinect/K4A colour and depth frames, integrates them into an InfiniTAM TSDF scene with CUDA support, renders free-view RGB output, and exposes that output to a remote viewer over WebRTC.
