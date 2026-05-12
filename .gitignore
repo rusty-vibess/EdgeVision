@@ -8,18 +8,30 @@ docs/
 build
 build-local
 build-deps
+build-coverage
 build-relwithdebinfo
 build-relwithdebinfo-tests
 .cache
 compile_commands.json
 
-# tools
+# coverage
+*.gcda
+*.gcno
+*.gcov
+coverage.info
+htmlcov/
+
+# local packages and generated context
+outbox/
 
 # sysroots
 sysroots
 
 # sysroot overlays
 *-overlay
+
+# local target-platform runtime libraries
+third_party/libs_*/
 
 # testing junk
 Testing

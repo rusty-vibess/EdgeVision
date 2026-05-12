@@ -6,17 +6,21 @@ set(CMAKE_INSTALL_PREFIX
     "/opt/jetson-sysroot-overlay/install"
     CACHE PATH "Third-party install prefix" FORCE)
 
-# Mirror close source third-party libs into the active sysroot overlay install if present
-set(EDGEVISION_THIRD_PARTY_LIB_DIR "${CMAKE_CURRENT_LIST_DIR}/../../third_party/libs_<platform>")
+# Mirror local target-platform runtime libs into the active sysroot overlay install if present.
+set(EDGEVISION_THIRD_PARTY_LIB_DIR
+    ""
+    CACHE PATH "Optional directory containing local runtime libraries to mirror into the sysroot overlay")
 set(EDGEVISION_SYSROOT_OVERLAY_LIB_DIR "${CMAKE_INSTALL_PREFIX}/lib")
 
-if(EXISTS "${EDGEVISION_THIRD_PARTY_LIB_DIR}")
+if(EDGEVISION_THIRD_PARTY_LIB_DIR AND EXISTS "${EDGEVISION_THIRD_PARTY_LIB_DIR}")
     file(MAKE_DIRECTORY "${EDGEVISION_SYSROOT_OVERLAY_LIB_DIR}")
     file(COPY "${EDGEVISION_THIRD_PARTY_LIB_DIR}/"
         DESTINATION "${EDGEVISION_SYSROOT_OVERLAY_LIB_DIR}")
     message(STATUS "Mirrored ${EDGEVISION_THIRD_PARTY_LIB_DIR} -> ${EDGEVISION_SYSROOT_OVERLAY_LIB_DIR}")
+elseif(EDGEVISION_THIRD_PARTY_LIB_DIR)
+    message(FATAL_ERROR "Third-party runtime lib directory not found at ${EDGEVISION_THIRD_PARTY_LIB_DIR}")
 else()
-    message(STATUS "Third-party lib directory not found at ${EDGEVISION_THIRD_PARTY_LIB_DIR}; skipping mirror")
+    message(STATUS "No third-party runtime lib directory configured; skipping mirror")
 endif()
 
 # Include cmake for deps to be pulled in

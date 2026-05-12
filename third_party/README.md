@@ -24,20 +24,25 @@ package manager. Keep source/vendor material separate from target-platform binar
 
 3. **Prebuilt target-platform binaries**
 
-   Binary libraries that cannot reasonably be rebuilt or fetched are stored by target
-   platform:
+   Binary libraries that cannot reasonably be rebuilt or fetched should stay local.
+   Do not commit proprietary runtime binaries. Store them in an ignored directory such
+   as:
 
    ```bash
    third_party/libs_<platform>/
    ```
 
-   The currently shipped binaries are for Ubuntu only, for example:
+   Pass that directory to the third-party configure step when it needs to be mirrored
+   into the sysroot overlay:
 
    ```bash
-   third_party/libs_<platform>/
+   cmake -S cmake/third_party -B build-deps \
+     -DEDGEVISION_THIRD_PARTY_LIB_DIR="$PWD/third_party/libs_<platform>"
    ```
 
-   Treat these as platform-specific artefacts. If your target OS, distro version,architecture or ABI differs, acquire or build matching binaries instead of reusing these blindly.
+   Treat these as platform-specific artefacts. If your target OS, distro version,
+   architecture or ABI differs, acquire or build matching binaries instead of
+   reusing these blindly.
 
 ---
 
