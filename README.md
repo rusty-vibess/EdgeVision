@@ -488,7 +488,3 @@ sudo jetson_clocks --show
 ## Release Notes
 
 See [RELEASE_NOTES.md](RELEASE_NOTES.md).
-
-## Licence
-
-Licence TBD. Public visibility of this repository does not yet grant permission to use, copy, modify, or redistribute the code. Choose and add a real `LICENSE` before encouraging external reuse or contributions.
